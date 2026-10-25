@@ -1,9 +1,9 @@
-"""데스크톱 앱 설치 파일을 만든다 (DESIGN.md 36.23 M40): 엔진 화면 → 엔진 얼리기 → 오르카 포크 설치 파일.
+"""데스크톱 앱 설치 파일을 만든다 (DESIGN.md 36.23 M40, 36.26): 엔진 화면 → 엔진 얼리기 → SSH 원격용 orcad 템플릿 → 오르카 포크 설치 파일.
 
     python desktop/build_desktop.py
 
 필요한 것: app/ 의 npm 의존성, pip install -e ".[desktop]" (PyInstaller), 오르카 포크 `orca/` 와
-휴대용 Node 24 `.tools/node24` (pnpm 은 corepack). 결과: orca/dist/ 의 tenure-<버전>-setup 설치 파일.
+휴대용 Node 24 `.tools/node24` (pnpm 은 corepack), 이 PC 에 설치된 정식 오르카(orcad 템플릿의 네이티브 파일). 결과: orca/dist/ 의 tenure-<버전>-setup 설치 파일.
 설치 파일은 서명하지 않는다(SmartScreen 경고가 뜰 수 있다). 업데이트는 아직 꺼져 있다.
 """
 
@@ -21,6 +21,14 @@ APP = ROOT / "app"
 ORCA = ROOT / "orca"
 NODE24 = ROOT / ".tools" / "node24"
 REVISION_FILE = ROOT / "desktop" / "desktop-revision.txt"
+# 원격(SSH) 서버로 까는 orcad 템플릿의 네이티브 파일을 가져올 정식 오르카 (DESIGN.md 36.26)
+OFFICIAL_ORCAD_TEMPLATE = Path(os.environ.get(
+    "TENURE_ORCAD_TEMPLATE_SOURCE",
+    Path(os.environ.get("LOCALAPPDATA", "")) / "Programs" / "orca" / "resources" / "orcad-template"))
+# win32-arm64 는 원격용 CLI 실행기를 arm64 Rust 표준 라이브러리로 빌드해야 해서 뺀다(없는 대상은 '쓸 수 없음'으로 거절된다).
+ORCAD_TARGETS = os.environ.get(
+    "TENURE_ORCAD_TARGETS",
+    "darwin-arm64,darwin-x64,linux-arm64-glibc,linux-arm64-musl,linux-x64-glibc,linux-x64-musl,win32-x64")
 
 
 def desktop_version() -> str:
@@ -33,6 +41,18 @@ def desktop_version() -> str:
 def run(cmd: list[str], cwd: Path, env: dict[str, str] | None = None) -> None:
     print(f"$ {' '.join(cmd)}  ({cwd.name})", flush=True)
     subprocess.run(cmd, cwd=cwd, env=env, check=True)
+
+
+def build_orcad_template(env: dict[str, str], pnpm: str) -> None:
+    """SSH 원격에 까는 orcad 템플릿을 포크 소스로 만든다. 네이티브 파일(node-pty·Windows 애드온)만 정식 오르카에서 가져온다(36.26)."""
+    if not (OFFICIAL_ORCAD_TEMPLATE / "orcad-template.json").is_file():
+        sys.exit(f"정식 오르카의 orcad 템플릿이 없습니다: {OFFICIAL_ORCAD_TEMPLATE}. "
+                 "정식 오르카를 설치하거나 TENURE_ORCAD_TEMPLATE_SOURCE 로 위치를 알려 주세요.")
+    node = str(NODE24 / ("node.exe" if sys.platform == "win32" else "node"))
+    run([pnpm, "run", "build:packages"], ORCA, env)
+    run([node, "--disable-warning=MODULE_TYPELESS_PACKAGE_JSON",
+         "config/scripts/tenure-seed-orcad-prebuilds.mjs", str(OFFICIAL_ORCAD_TEMPLATE)], ORCA, env)
+    run([node, "config/scripts/build-orcad-template.mjs", "--targets", ORCAD_TARGETS], ORCA, env)
 
 
 def main() -> None:
@@ -48,6 +68,9 @@ def main() -> None:
            "ORCA_LOCAL_BUILD_VERSION": desktop_version()}
     print(f"데스크톱 앱 버전: {env['ORCA_LOCAL_BUILD_VERSION']}")
     pnpm = str(NODE24 / ("pnpm.cmd" if sys.platform == "win32" else "pnpm"))
+    build_orcad_template(env, pnpm)
+    env["ORCA_REQUIRE_ORCAD_TEMPLATE"] = "1"                                 # 템플릿 없이 설치 파일을 만들지 않는다
+    env["TENURE_ORCAD_TARGETS"] = ORCAD_TARGETS                              # 포장 단계 검사가 뺀 대상을 알게
     if not (ORCA / "mobile" / "node_modules").is_dir():                       # 설치 파일 단계가 모바일 웹 묶음을 검사한다
         run([pnpm, "install", "--frozen-lockfile"], ORCA / "mobile", env)
     target = {"win32": "build:win", "darwin": "build:mac"}.get(sys.platform, "build:linux")

@@ -3,7 +3,7 @@
 이 저장소는 **tenure**(옛 이름 duet)를 만든다. 무엇을 만드는지는 **DESIGN.md가 기준**이다. 작업 시작 전에 DESIGN.md 를 읽어라(지금 진행 중인 설계는 36장).
 
 ## 작업 방식
-- 마일스톤을 **순서대로 하나씩** 진행한다. M30–M42 은 끝났다(오르카 포크, 지휘자 + 일꾼 중계와 그 고치기까지). 다음은 SSH 실행 위치(DESIGN.md 36.25 ③). 남은 일은 DESIGN.md 36.23 의 '남은 것'과 '릴리스'를 본다.
+- 마일스톤을 **순서대로 하나씩** 진행한다. M30–M43 은 끝났다(오르카 포크, 지휘자 + 일꾼 중계, SSH 원격용 템플릿까지). 남은 확인은 DESIGN.md 36.26 '확인 못 한 것'. 남은 일은 DESIGN.md 36.23 의 '남은 것'과 '릴리스'를 본다.
 - 각 마일스톤마다: 구현 → 테스트 작성 → 테스트 통과 확인 → 완료 기준 점검 → 커밋(`M30: 엔진 기반` 같은 메시지).
 - 한 마일스톤을 끝내면 무엇을 했는지 3~5줄로 보고하고, 다음 마일스톤으로 넘어가기 전에 멈춘다. (사용자가 "계속"이라고 하면 진행)
 - 설계에서 벗어나야 할 이유가 생기면 먼저 사용자에게 묻고, 합의되면 DESIGN.md도 함께 고친다. 몰래 바꾸지 않는다.
@@ -27,6 +27,6 @@
 - 테스트: `pytest -q`
 - 수동 확인: `tenure run "할일 CLI" --workdir /tmp/tenure-try --mock`
 - 화면 빌드: `cd app && npm install && npm run build` (결과는 src/tenure/ui/web, 커밋한다. 개발 중에는 `npm run dev` 가 /api 를 8790 의 tenure ui 로 넘김)
-- 데스크톱 앱: `python desktop/build_desktop.py` (엔진 화면 → 엔진 얼리기 → 오르카 포크 `orca/` 의 NSIS 설치 파일 `orca/dist/`, 버전은 `desktop/desktop-revision.txt` 회차로). 릴리스는 `pyk-kentech/tenure` 에 수동으로 올린다(서명 없음 → 자동 업데이트 꺼짐). 포크 개발 실행: `orca/` 에서 PATH 앞에 `.tools/node24` 를 두고 `pnpm dev`
+- 데스크톱 앱: `python desktop/build_desktop.py` (엔진 화면 → 엔진 얼리기 → SSH 원격용 orcad 템플릿(이 PC 의 정식 오르카 필요, 36.26) → 오르카 포크 `orca/` 의 NSIS 설치 파일 `orca/dist/`, 버전은 `desktop/desktop-revision.txt` 회차로). 릴리스는 `pyk-kentech/tenure` 에 수동으로 올린다(서명 없음 → 자동 업데이트 꺼짐). 포크 개발 실행: `orca/` 에서 PATH 앞에 `.tools/node24` 를 두고 `pnpm dev`
 - 관리자 UI: `tenure ui` (느린 mock 으로 화면 확인: `TENURE_MOCK_DELAY=1 tenure ui`)
 - UI 테스트는 `tests/test_ui.py`(HTTP 수준). 테스트는 `TENURE_HOME` 을 임시 폴더로 바꿔 사용자의 `~/.tenure` 을 건드리지 않는다.
