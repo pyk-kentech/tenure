@@ -513,6 +513,9 @@ env_keep = ["CLAUDE_CODE_OAUTH_TOKEN"]
 - 주의: Claude 데스크톱 앱(MSIX) 안에서 띄운 명령으로 설치하면 AppData 쓰기가 그 앱의 가상 공간으로 돌아가 바로 가기가 깨진다 → 탐색기로 띄워 설치했다. 사용자가 설치 파일을 직접 두 번 눌러 설치하면 문제없다.
 - 남은 것: 깨끗한 다른 PC 에 설치해 보기, 첫 GitHub 릴리스 올리기(요청할 때)
 
+### M41. 지휘자 + 일꾼 중계 (2026-10-25 사용자 요청)
+- 포크: 새 작업공간 창의 '지휘자 + 일꾼' 모드, 지휘자 프롬프트, CLI 회차 상한(`TENURE_RELAY_MAX_ROUNDS`), 윈도우 CLI 실행기의 `tenure.exe` 찾기 (36.24)
+
 ### M7. 관리자 UI (2026-10-15 사용자 요청으로 추가)
 - `registry.py`, `lock.py`, `ui/dashboard.py`, `ui/server.py`, `ui/static/*`, `duet ui`
 - ✅ HTTP 수준 테스트(토큰·Host 검사, 경로 조작 거부, 조회, 실행·중지·이어하기), 헤드리스 브라우저로 화면·JS 오류 확인
@@ -1736,3 +1739,22 @@ M30 quick 54번의 호출 기록으로 시간·사용량(Codex 한도 환산)이
 **정리 (2026-10-23, M40 뒤)**: (1) 정식 오르카와 같이 쓰던 폴더를 분리: `~/.orca` → `~/.tenure-desktop`(자격 증명·키 설정·훅 스크립트 등 16곳), `%LOCALAPPDATA%\Orca`(데몬) → `%LOCALAPPDATA%\tenure`, 로그 기본값 → `tenure`. 원격 호스트 쪽 `~/.orca`(SSH 서버 설치)와 저장소 안의 `.orca/`(프로젝트 설정)는 업스트림 호환 때문에 그대로. (2) 화면 이름: 7개 언어 카탈로그의 'Orca' → 'tenure', 그리고 문구 함수(`translate`·`translateMain`)가 표시 직전에 한 번 더 바꿔 카탈로그에 없는 영어 기본값까지 덮는다. 앱·설치 아이콘과 로고는 tenure 의 t. 모바일 동반 앱 버튼은 업스트림 클라우드를 쓰므로 기본 숨김. (3) 이 모든 전환은 빌드 표시 `TENURE_FORK_BUILD`(electron-vite main·renderer define)가 있을 때만 켜져, vitest 의 업스트림 테스트는 원래 이름·경로를 그대로 본다(관련 테스트 묶음에서 새 실패 없음 확인, 원래부터 이 환경에서 깨지는 것만 남음). 설치본에서 화면 글자에 'Orca' 0건, 데몬 폴더 분리, `~/.orca` 안 건드림을 확인.
 
 **저장소·릴리스 (2026-10-23, 사용자 결정)**: 엔진 저장소 `pyk-kentech/duet` → `pyk-kentech/tenure` 로 이름 변경(옛 주소 자동 연결), m30-engine(M28–M40) 을 master 에 병합해 올림. 포크는 새 공개 저장소 `pyk-kentech/tenure-desktop`(기본 브랜치 tenure, 원격 `upstream` = stablyai/orca, 오르카 CI 가 헛돌지 않게 Actions 끔). 업데이트 주소는 `pyk-kentech/tenure` 릴리스로 바꾸고 업스트림 알림·변경 내역(onorca.dev)은 끔. **설치 파일에 코드 서명이 없어 자동 업데이트는 당분간 쓰지 않는다**(사용자 선택: 수동 설치. 서명 확인을 빼는 것은 보안을 낮춰 하지 않음 — 서명을 붙이면 그때 켠다). 앱 버전 = 오르카 버전 끝자리 ×100 + tenure 회차(`desktop/desktop-revision.txt`, 예: 1.4.214 + 1 → 1.4.21401) 로 오르카가 올라가도 계속 커지게 한다. 첫 릴리스 v0.1.0 = 데스크톱 1.4.21401.
+
+### 36.24 지휘자 + 일꾼 중계 (M41, 2026-10-25 사용자 결정)
+사용자 요청: "GPT 창과 Codex 창을 띄워 두고, Codex 의 답과 파일을 GPT 에 넘기고 GPT 의 지시를 다시 Codex 에 넣어 돌리기". 웹 화면 자동화는 비목표(1장, 약관·취약)라 CLI 로 한다. 사용자가 고른 모양은 **화면 두 개 자동 중계**(사람이 보면서 끼어들 수 있는 대화형)다.
+
+- **31.4 와의 관계**: 31.4 는 헤드리스 자동 흐름에서 관리자·작업자 분업(extended)을 없앤 결정이다. 이번 것은 엔진 흐름이 아니라 포크의 대화형 터미널 기능이고 벤치마크 흐름에 넣지 않는다. 그래서 그 결정과 부딪히지 않는다. 엔진 워크플로(36.5)는 그대로다.
+- **쓰는 것**: 오르카에 이미 있는 orchestration(지휘자 에이전트가 `orca orchestration …` 으로 일꾼 터미널에 일을 맡기고, `worker_done` 을 기다리고, 결과를 읽는다). 새로 짜지 않는다.
+- **시작**: 새 작업공간 창의 tenure 칸이 고르기 셋이 된다: 에이전트(기본) / tenure 흐름(M39) / **지휘자 + 일꾼**. 지휘자 + 일꾼을 고르면 과제와 함께 지휘자·일꾼의 모델·추론 강도, 최대 회차(기본 5, 1~20)를 받는다. 만든 작업공간의 첫 터미널에 지휘자 Codex 를 `-m <모델> -c model_reasoning_effort=<강도>` 와 지휘자 프롬프트로 띄운다(일반 에이전트 시작과 같은 길, 터미널 방식으로 고정).
+- **지휘자 프롬프트**(한국어, 한 줄, 큰따옴표 없음): 직접 코드를 고치지 말 것 → `orca skills get orchestration` 으로 지침 읽기 → `run-create` → `orca terminal split --command <일꾼 명령>` 로 옆에 일꾼 띄우고(일꾼 명령은 `[codex …]` 로 보여 주고 지휘자가 따옴표로 감싼다. 사용자의 Codex 기본 인자도 일꾼 명령에 붙인다 — 나뉜 창은 일반 에이전트 시작 길을 타지 않기 때문) `terminal wait --for tui-idle` → 회차마다 `task-create`(명세 계약: 대상·변경·제약·소유·완료 확인) → `worker-start --task --terminal <일꾼>` → `check --wait` → `worker-read` 와 `git diff` 로 확인 → 다음 회차 또는 끝 → `worker-release` → 사용자에게 회차별 결과·남은 문제를 한국어로 보고하고 마지막 줄에 `TENURE-RELAY-DONE: <한 줄 요약>`. 개발 실행에서는 명령 이름이 `orca-dev`.
+- **사용자 설정을 건드리지 않는다**: 오르카의 orchestration 스킬 설치(`~/.agents/skills`, `~/.claude/skills` 에 씀)를 쓰지 않고, 지침은 프롬프트가 `skills get` 으로 읽게 한다.
+- **회차 상한(진짜로 막음)**: 지휘자 터미널에 `TENURE_RELAY_MAX_ROUNDS=<N>` 를 붙인다. 포크 CLI 가 이 값이 있으면 `task-create` 와 `worker-start --spec`(새 작업을 만드는 두 명령) 전에 묶인 실행의 작업 수를 세고, N 이상이면 한국어 오류로 거부한다(`tenure_relay_round_cap`). 값이 없으면 업스트림 동작 그대로.
+- **멈추기**: 지휘자 터미널에서 Codex 를 멈추면(Esc·Ctrl+C·창 닫기) 다음 지시가 나가지 않는다. 일꾼은 오르카의 `worker-stop`/창 닫기. 따로 정지 단추는 만들지 않는다(오르카 터미널이 이미 그 일을 한다).
+- **설치본 CLI 고침**: 포크의 윈도우 CLI 실행기(`native/windows-cli-launcher`)가 `Orca.exe` 만 찾아, 실행 파일 이름이 `tenure.exe` 인 설치본에서는 터미널 안 `orca` 가 모든 명령에서 실패했다. `Orca.exe` 다음에 `tenure.exe` 도 찾게 고친다. tenure 터미널은 `ORCA_USER_DATA_PATH=%APPDATA%\tenure` 를 물려받아 정식 오르카가 아니라 tenure 앱에 붙는다(런타임 출처 울타리도 있음).
+- **확인**: 실제 Codex 프롬프트는 돌리지 않는다(CLAUDE.md). 프롬프트·명령 조립과 회차 상한은 vitest, 실행기는 설치본 `orca.exe --version`, 화면은 개발 실행에서 가짜 codex 로 작업공간 생성 → 지휘자 명령이 터미널에 들어가는지까지.
+- **한계**: WSL 터미널(`orca-ide`)·원격 SSH 작업공간은 이번에 다루지 않는다. Codex 샌드박스가 오르카 런타임 연결을 막으면(`runtime_access_denied`) 지휘자가 권한을 올려 다시 실행해야 한다(지침에 있음).
+
+**M41 결과 (2026-10-25)**: 포크 커밋 `7b45cb2c4c`. (1) 새 작업공간 창의 tenure 칸에 '지휘자 + 일꾼 중계로 시작' 체크(흐름과 둘 중 하나): 지휘자·일꾼 모델(비우면 Codex 설정)·추론 강도, 최대 회차(기본 5, 1~20), 과제. 만들면 지휘자 Codex 가 `-m`·`-c model_reasoning_effort`·`TENURE_RELAY_MAX_ROUNDS`·지휘자 프롬프트로 첫 터미널에 뜬다(`src/shared/tenure-relay.ts`, `quick-startup-plan.ts`). (2) 포크 CLI 회차 상한(`tenure-relay-round-cap.ts`). (3) 윈도우 CLI 실행기가 `tenure.exe` 도 찾는다(가짜 배치로 `tenure.exe` 옆에서 CLI 가 뜨는 것 확인).
+**사고와 수정**: 처음 프롬프트는 `--command "codex …"` 처럼 큰따옴표를 넣었는데, Windows PowerShell 5.1 이 네이티브 인자를 큰따옴표 자리에서 쪼개 프롬프트가 여러 인자로 갈라졌다(e2e 의 가짜 codex 가 받은 인자로 발견). 프롬프트에서 큰따옴표를 모두 없앴다.
+**확인**: vitest(프롬프트·명령 조립 7개, 회차 상한 6개, 주변 묶음 470개), 타입 검사(cli·web), 번역 검사, e2e `tests/e2e/tenure-relay-composer.spec.ts`(실제 화면에서 모드를 켜고 만들기 → 가짜 codex 가 받은 인자·상한 환경 변수·한 덩어리 프롬프트 확인). 실제 Codex 로 지휘자가 일꾼을 부리는 끝까지의 중계는 돌리지 않았다(CLAUDE.md, 구독 한도).
+**남은 것**: 실제 Codex 로 한 번 끝까지 돌려 보기(사용자가 요청할 때), 설치본 다시 빌드(실행기 고침이 설치본에 들어가려면 필요), 중계 중 에이전트 선택 칸이 다른 에이전트를 보여 주는 것(무시되지만 헷갈림).
