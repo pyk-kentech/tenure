@@ -1792,4 +1792,10 @@ M41 을 써 본 사용자 지적: ① 모델을 손으로 치게 함 ② 최대 
 - `desktop/build_desktop.py`: 엔진 얼리기 뒤 템플릿을 매번 포크 소스로 다시 만들고(`TENURE_ORCAD_TEMPLATE_SOURCE` 로 정식 템플릿 위치를 바꿀 수 있음), `ORCA_REQUIRE_ORCAD_TEMPLATE=1` 로 템플릿 없는 설치 파일을 만들지 않는다.
 
 **M43 결과 (2026-10-25)**: 포크 커밋 `6f88793ab6d`. 템플릿 빌드 성공(8개 대상: darwin-arm64/x64, linux-arm64-glibc/musl, linux-x64-glibc/musl, linux-x64-glibc217, win32-x64, 78MB, `verify-packaged-orcad-template` 통과), 설치 파일 210.8MB 에 템플릿 포함·포장 검사 통과. 업스트림 템플릿 검사 테스트 19개 통과.
-**확인 못 한 것**: 실제 SSH 서버에 연결해 원격 설치·터미널까지(사용자의 서버를 건드리므로 사용자 확인 뒤), 설치(사용자가 나중에), 정식 오르카가 업데이트돼 네이티브 파일이 바뀌어도 맞는지(node-pty 패치가 바뀌면 다시 확인).
+**실제 연결 확인 (2026-10-25, 사용자 요청)**: 새 설치 파일을 설치하고 css53 에 연결.
+- 처음엔 실패했다. 원인은 템플릿이 아니라 **키 형식**: css53 키가 암호 없는 PKCS#8(`BEGIN PRIVATE KEY`)인데, 앱의 SSH 라이브러리 ssh2 는 이 형식을 'Unsupported key format' 으로 거부한다(OpenSSH 는 읽어서 `ssh css53` 은 됐다). 업스트림 오르카에도 있는 한계.
+- 고침(포크 `d7fe26c64e4`): `src/main/ssh/ssh-pkcs8-key.ts` 가 키를 읽을 때 RSA 는 PKCS#1, EC 는 SEC1 PEM 으로 메모리에서 바꿔 ssh2 에 넘긴다(키 파일은 그대로). 키를 읽는 세 곳(`ssh-auth-resolution.ts` 두 곳, `ssh-agent-identity-filter.ts`)에 붙였다. Ed25519·암호 걸린 PKCS#8 은 그대로 둔다.
+- 고친 뒤: `ssh.connect` → connected, managed server. 서버에 `~/.orca-remote`(159MB, 포크가 고정한 Node 24.22.1 linux-x64-glibc) 와 `~/.orca` 가 깔리고 서버 프로세스가 돈다. 서버의 시험 폴더(`~/tenure-ssh-check`, git 저장소)를 그 서버의 프로젝트로 추가하고 터미널을 열어 `hostname`·`uname -m`·`pwd` 가 css53 에서 나오는 것을 확인했다(시험 터미널은 닫음, 시험 폴더와 프로젝트는 남김).
+- 확인 수단: 앱의 CLI 클라이언트로 런타임 RPC(`ssh.connect`)를 직접 불렀다(연결 실패 이유는 화면에만 방송되고 로그·RPC 에는 일반 문구만 남는다).
+
+**확인 못 한 것**: 화면(새 작업공간 창의 실행 위치)에서 css53 을 고르는 흐름, 정식 오르카가 업데이트돼 네이티브 파일이 바뀌어도 맞는지(node-pty 패치가 바뀌면 다시 확인).
