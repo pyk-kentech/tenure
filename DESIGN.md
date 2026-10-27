@@ -1799,3 +1799,14 @@ M41 을 써 본 사용자 지적: ① 모델을 손으로 치게 함 ② 최대 
 - 확인 수단: 앱의 CLI 클라이언트로 런타임 RPC(`ssh.connect`)를 직접 불렀다(연결 실패 이유는 화면에만 방송되고 로그·RPC 에는 일반 문구만 남는다).
 
 **확인 못 한 것**: 화면(새 작업공간 창의 실행 위치)에서 css53 을 고르는 흐름, 정식 오르카가 업데이트돼 네이티브 파일이 바뀌어도 맞는지(node-pty 패치가 바뀌면 다시 확인).
+
+### 36.27 에이전트 상태 되살리기와 흐름 기록 탭 (2026-10-27 사용자 승인)
+포크의 탭·카드 상태(작업 중·입력 기다림·끝남)는 오르카가 `~/.claude/settings.json`, `~/.codex/hooks.json` 에 훅을 심어 받는다. 이는 '사용자 설정을 고치지 않는다' 규칙과 부딪혀 tenure 빌드에서 상태 받기가 꺼져 있었다(제목에서 짐작한 상태만 보임). 개선 1·2순위로 다음을 했다(포크 `11a54444398`).
+
+1. **사용자 전역 설정 쓰기 차단**: `user-global-config-guard.ts` 가 홈 바로 아래 점 폴더(`~/.claude`, `~/.codex`, `~/.config/...` 등, `~/.tenure-desktop` 은 제외)를 가리키는 쓰기를 거절한다. 훅 JSON(`writeHooksJson`)과 Codex TOML(`writeTomlConfigAtomically`) 쓰기 지점에 붙이고, 시작 시 Codex 훅 고치기·신뢰 올리기·옛 훅 정리, OpenCode 플러그인 새로 고침, orcad 훅 맞추기는 tenure 빌드에서 건너뛴다.
+2. **Claude 훅은 실행마다 인자로**: 엔진이 뜨면 `~/.tenure-desktop/agent-hooks/claude-settings.json`(훅 스크립트 포함)을 만들고, 터미널 환경에 `ORCA_CLAUDE_HOOK_SETTINGS` 를 넣는다. 셸의 `claude` 래퍼(POSIX·fish·PowerShell)가 그 파일이 있고 사용자가 `--settings` 를 주지 않았으면 `--settings <파일>` 을 앞에 붙인다(하위 명령 `claude mcp ...` 처럼 첫 인자가 단어면 붙이지 않음). 훅 경로의 `.orca` 는 `~/.tenure-desktop` 으로 고쳤다.
+3. **상태 받기 다시 켜기**: `agentStatusHooksEnabled` 기본값을 켜고, 꺼진 채 저장된 프로필은 한 번만 켠다(`tenureStatusHooksRestored`). 전역 훅 설치 단계(`shouldInstallManagedHooks`)는 여전히 꺼져 있다.
+4. **흐름 기록을 탭으로**: 흐름 패널의 각 기록과 결과 요약 옆 버튼으로 오르카의 마크다운 미리보기 탭에 연다(엔진 `TenureRunDetail.run_dir` 사용).
+
+**확인한 것**: 개발 앱에서 설정 파일·훅 스크립트 생성, 새 터미널의 환경 변수, 훅 서버에 손으로 보낸 이벤트(204)와 탭의 알림 표시, 래퍼를 거친 `claude --version`, mock 흐름 기록이 탭으로 열림. 시험 전후로 `~/.claude/settings.json`, `~/.codex/hooks.json` 은 그대로(`~/.codex/config.toml` 은 10-26 에 바뀌었으나 시험 전이고 tenure 흔적 없음).
+**확인 못 한 것 / 한계**: 실제 Claude 실행에서의 상태 전환(실제 프롬프트 필요). Codex 기본 계정은 실제 `~/.codex` 를 쓰므로 훅을 붙일 길이 없어 제목 기반 상태만 보인다(관리 계정은 자체 CODEX_HOME). 셸 스냅샷 테스트는 POSIX 전용이라 Windows 에서 건너뜀. 설치 파일에는 아직 들어가지 않았다(다시 빌드 필요).
