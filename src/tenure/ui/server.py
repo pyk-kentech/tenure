@@ -788,6 +788,9 @@ class Handler(BaseHTTPRequestHandler):
         ("POST", "/api/actions/notes"): "notes_send",
         ("POST", "/api/actions/pick"): "pick",
         ("POST", "/api/flow/notes"): "flow_notes",
+        ("GET", "/api/workflow"): "workflow_get",
+        ("POST", "/api/workflow/check"): "workflow_check",
+        ("POST", "/api/workflow/save"): "workflow_save",
     }
 
     def _api(self, method: str, path: str, q: dict[str, str], body: dict[str, Any]) -> Any:

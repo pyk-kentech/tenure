@@ -14,6 +14,14 @@ tenure 가 함께 배포하거나 실행 중에 쓰는 다른 프로젝트의 �
 | [react](https://github.com/facebook/react) | 18.3.1 | MIT | Copyright (c) Facebook, Inc. and its affiliates |
 | [react-dom](https://github.com/facebook/react) | 18.3.1 | MIT | Copyright (c) Facebook, Inc. and its affiliates |
 
+## 데스크톱 앱(포크 `orca/`)에 더한 것
+
+| 패키지 | 버전 | 라이선스 | 저작권 | 용도 |
+|---|---|---|---|---|
+| [@xyflow/react](https://github.com/xyflow/xyflow) (React Flow) | 12.12.0 | MIT | Copyright (c) 2019-2025 webkid GmbH | 워크플로 노드 편집기 캔버스 (DESIGN.md 36.29) |
+
+선 묶기 아이디어는 [comfyui-zip-ties](https://github.com/safzanpirani/comfyui-zip-ties)(MIT)를 참고했고 코드는 가져오지 않았습니다.
+
 ## 실행 중에 쓰는 파이썬 패키지 (설치 시 따로 받음)
 
 | 패키지 | 버전 | 라이선스 | 저작권 | 용도 |

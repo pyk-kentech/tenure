@@ -1252,7 +1252,17 @@ API_METHODS: dict[str, Any] = {
     "ws_status": lambda d, a: d.ws_call(fileslib.status, d.ws_dir(a.get("project"), a.get("run"))),
     "ws_diff": lambda d, a: d.ws_call(fileslib.file_diff, d.ws_dir(a.get("project"), a.get("run")), a.get("path") or ""),
     "limits": lambda d, a: d.limits(),
+    # 워크플로 노드 편집기 (DESIGN.md 36.29 M44). workflow_api 가 이 모듈의 ApiError 를 쓰므로 부를 때 읽는다.
+    "workflow_get": lambda d, a: _workflow_api().workflow_get(d, a.get("project"), a.get("name")),
+    "workflow_check": lambda d, a: _workflow_api().workflow_check(d, a),
+    "workflow_save": lambda d, a: _workflow_api().workflow_save(d, a),
 }
+
+
+def _workflow_api():
+    from tenure.ui import workflow_api
+
+    return workflow_api
 
 
 def dispatch(d: Dashboard, method: str, args: dict[str, Any]) -> Any:
