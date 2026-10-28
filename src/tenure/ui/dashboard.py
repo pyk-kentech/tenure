@@ -351,7 +351,7 @@ class Dashboard:
         wd: Path | None = None
         if project:
             try:
-                wd = self.project(project)
+                wd = _workflow_api().workdir_of(self, project)   # 등록 전 작업공간 폴더도 (36.29)
             except ApiError:
                 wd = None
         try:

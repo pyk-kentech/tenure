@@ -97,6 +97,19 @@ def test_save_rejects_bad_names_and_invalid_workflows(proj):
     assert not (proj / ".tenure" / "workflows" / "x.toml").exists()
 
 
+def test_unregistered_workspace_folder(tmp_path):
+    wd = tmp_path / "새 작업공간"
+    wd.mkdir()
+    d = Dashboard()
+    assert dispatch(d, "workflow_get", {"project": str(wd), "name": "secure"})["source"] == "builtin"
+    dispatch(d, "workflow_save", {"project": str(wd), "name": "mine", "workflow": SECURE})
+    assert (wd / ".tenure" / "workflows" / "mine.toml").is_file()
+    ids = [w["id"] for w in dispatch(d, "workflows", {"project": str(wd)})["workflows"]]
+    assert "mine" in ids
+    with pytest.raises(ApiError):
+        dispatch(d, "workflow_get", {"project": str(tmp_path / "없음"), "name": "secure"})
+
+
 def test_save_to_user_scope(proj, tmp_path):
     d = Dashboard()
     out = dispatch(d, "workflow_save", {"name": "mine", "scope": "user", "workflow": SECURE})

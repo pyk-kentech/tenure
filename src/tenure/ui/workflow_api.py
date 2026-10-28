@@ -28,7 +28,20 @@ SCOPES = ("project", "user")
 
 
 def _workdir(d: Any, project: Any) -> Path | None:
-    return d.project(project) if project else None
+    """프로젝트 폴더. 데스크톱 앱의 작업공간은 엔진에 아직 등록되지 않았을 수 있다(흐름을 처음 돌릴 때 등록됨)."""
+    return workdir_of(d, project)
+
+
+def workdir_of(d: Any, project: Any) -> Path | None:
+    if not project:
+        return None
+    try:
+        return d.project(project)
+    except ApiError:
+        p = Path(str(project)).expanduser()
+        if p.is_dir():
+            return p.resolve()
+        raise
 
 
 def _config(wd: Path | None) -> Config:
