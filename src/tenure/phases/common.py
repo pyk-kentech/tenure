@@ -8,6 +8,7 @@
 from __future__ import annotations
 
 import datetime as dt
+import threading
 import time
 from dataclasses import dataclass, field
 from pathlib import Path
@@ -73,6 +74,8 @@ class PhaseContext:
     retries: int = 1
     # 워크플로 템플릿 (DESIGN.md 19장). None 이면 agents 의 키가 곧 CLI 이름(classic)
     workflow: "Workflow | None" = None
+    # 나란히 단계(DESIGN.md 36.30)가 기록 번호 매기기·상태 저장을 줄 세우는 잠금
+    lock: threading.RLock = field(default_factory=threading.RLock, repr=False, compare=False)
 
     # ---------------------------------------------------------------- roles
     def cli_of(self, role: str) -> str:
@@ -195,6 +198,10 @@ class PhaseContext:
 
     # ---------------------------------------------------------------- state
     def save(self) -> None:
+        with self.lock:
+            self._save()
+
+    def _save(self) -> None:
         self.state.save(self.run_dir)
         st = self.state
         key = (st.status, st.phase, st.step, st.round)
@@ -276,11 +283,12 @@ class PhaseContext:
             }
             text = (transform(result) if transform is not None else result.text) if result.ok else result.text
             body = text if result.ok else _failure_body(result)
-            path = self.transcript.save(label if result.ok else f"{label}_failed", body, meta)
-            self.state.record_call(cli, step, elapsed, result.exit_code,
-                                   rate_limited=result.rate_limited, timed_out=result.timed_out,
-                                   file=path.name, usage=result.usage,
-                                   role=agent_name if cli != agent_name else None, outcome=outcome, reason=why)
+            with self.lock:
+                path = self.transcript.save(label if result.ok else f"{label}_failed", body, meta)
+                self.state.record_call(cli, step, elapsed, result.exit_code,
+                                       rate_limited=result.rate_limited, timed_out=result.timed_out,
+                                       file=path.name, usage=result.usage,
+                                       role=agent_name if cli != agent_name else None, outcome=outcome, reason=why)
             events.for_run(self.run_dir).emit(events.STEP_END, agent=cli, role=agent_name, step=step, round=round_,
                                               attempt=attempt, outcome=outcome, reason=why, sec=round(elapsed, 1),
                                               file=path.name)

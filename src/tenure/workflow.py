@@ -30,7 +30,14 @@ from tenure.config import (
 )
 
 ROLE_NAME_RE = re.compile(r"^[a-z][a-z0-9_]{0,23}$")
-STEP_KINDS = ("explore", "debate", "build", "audit")
+STEP_KINDS = ("explore", "debate", "build", "audit", "branch", "continue", "parallel")
+# 그래프 형식에서만 쓰는 단계 (DESIGN.md 36.30)
+GRAPH_KINDS = ("branch", "continue", "parallel")
+BRANCH_CHECKS = ("approved", "tests_pass", "audit_clean")
+END = "end"
+MAX_VISITS = 5
+MAX_CONTINUE_ROUNDS = 5
+MAX_PARALLEL = 4
 # 역할이 프롬프트 템플릿을 바꿀 수 있는 단계
 PROMPT_STEPS = ("propose", "critique", "synthesize", "implement", "fix", "review", "rereview", "explore", "audit",
                 "arbitrate", "dedup", "report")
@@ -43,10 +50,13 @@ SOURCE_LABELS = {"config": "설정", "builtin": "내장", "user": "내 템플릿
 
 _ROLE_KEYS = {"agent", "model", "effort", "step_effort", "step_model", "instructions", "templates"}
 _STEP_KEYS = {
-    "explore": {"kind", "id", "role"},
-    "debate": {"kind", "id", "proposers", "rounds", "synth", "output"},
-    "build": {"kind", "id", "implementer", "reviewers", "max_review", "arbiter", "design", "rivals"},
-    "audit": {"kind", "id", "roles"},
+    "explore": {"kind", "id", "role", "next", "max_visits"},
+    "debate": {"kind", "id", "proposers", "rounds", "synth", "output", "next"},
+    "build": {"kind", "id", "implementer", "reviewers", "max_review", "arbiter", "design", "rivals", "next"},
+    "audit": {"kind", "id", "roles", "next", "max_visits"},
+    "branch": {"kind", "id", "check", "yes", "no", "max_visits"},
+    "continue": {"kind", "id", "implementer", "reviewers", "rounds", "next", "max_visits"},
+    "parallel": {"kind", "id", "branches", "next", "max_visits"},
 }
 _TOP_KEYS = {"name", "description", "roles", "steps"}
 
@@ -110,6 +120,13 @@ class Step:
     design: str | None = None                                # build: None/"doc" = DESIGN.md, "task" = 과제 원문을 설계로 (36.5)
     rivals: list[str] = field(default_factory=list)          # build: 경쟁 초안의 맞수 (36.15)
     roles: list[str] = field(default_factory=list)           # audit
+    # 그래프 형식 (DESIGN.md 36.30): 다음 단계, 갈림 조건·가지, 나란히 가지, 최대 반복
+    next: str | None = None
+    check: str | None = None
+    yes: str | None = None
+    no: str | None = None
+    branches: list[str] = field(default_factory=list)
+    max_visits: int | None = None
 
     def role_names(self) -> list[str]:
         names = [*([self.role] if self.role else []), *self.proposers, *([self.synth] if self.synth else []),
@@ -144,7 +161,13 @@ class Step:
             if self.rivals:
                 return f"race({self.implementer} 대 {', '.join(self.rivals)}; 서로 리뷰 → 판정 → 승자가 이어서{extra})"
             return f"build({self.implementer}; 리뷰 {', '.join(self.reviewers)}{extra})"
-        return f"audit({', '.join(self.roles)})"
+        if self.kind == "audit":
+            return f"audit({', '.join(self.roles)})"
+        if self.kind == "branch":
+            return f"branch({self.check}? {self.yes or END} : {self.no or END})"
+        if self.kind == "continue":
+            return f"continue({self.implementer}; 리뷰 {', '.join(self.reviewers)}, {self.rounds}회)"
+        return f"parallel({', '.join(self.branches)})"
 
 
 @dataclass
@@ -159,6 +182,10 @@ class Workflow:
     @property
     def is_classic(self) -> bool:
         return self.source == "config"
+
+    @property
+    def is_graph(self) -> bool:
+        return is_graph_steps(self.steps)
 
     def first(self, kind: str) -> Step | None:
         return next((s for s in self.steps if s.kind == kind), None)
@@ -225,7 +252,12 @@ def parse_workflow(data: Mapping[str, Any], *, name_hint: str, source: str, wher
     if not isinstance(raw_steps, list) or not raw_steps:
         raise err("[[steps]] 가 하나 이상 있어야 합니다")
     steps = [_parse_step(i, sdata, roles, err) for i, sdata in enumerate(raw_steps, 1)]
-    _check_order(steps, err)
+    if is_graph_steps(steps):
+        from tenure.workflow_graph import check_graph
+
+        check_graph(steps, err)
+    else:
+        _check_order(steps, err)
     return Workflow(name=name.strip(), description=description.strip(), roles=roles, steps=steps, source=source)
 
 
@@ -354,9 +386,45 @@ def _parse_step(i: int, sdata: Any, roles: Mapping[str, Role], err) -> Step:
             if sdata["design"] not in ("doc", "task"):
                 raise err(f"{label}: design 은 doc 또는 task 여야 합니다: {sdata['design']!r}")
             step.design = sdata["design"]
-    else:
+    elif kind == "audit":
         step.roles = _role_list(sdata, "roles", label, roles, err, lo=1, hi=MAX_AUDITORS)
+    elif kind == "branch":
+        check = sdata.get("check")
+        if check not in BRANCH_CHECKS:
+            raise err(f"{label}: check 는 {', '.join(BRANCH_CHECKS)} 중 하나여야 합니다: {check!r}")
+        step.check = check
+        step.yes = _target(sdata, "yes", label, err)
+        step.no = _target(sdata, "no", label, err)
+    elif kind == "continue":
+        step.implementer = _need_role(sdata.get("implementer"), label, roles, err)
+        step.reviewers = _role_list(sdata, "reviewers", label, roles, err, lo=1, hi=MAX_REVIEWERS)
+        if step.implementer in step.reviewers:
+            raise err(f"{label}: 구현자({step.implementer})는 리뷰어가 될 수 없습니다")
+        step.rounds = _int_in(sdata, "rounds", label, 1, MAX_CONTINUE_ROUNDS, err) or 1
+    else:
+        v = sdata.get("branches")
+        if not isinstance(v, list) or not all(isinstance(x, str) for x in v) or not 2 <= len(v) <= MAX_PARALLEL:
+            raise err(f"{label}: branches 는 단계 id {2}~{MAX_PARALLEL}개의 목록이어야 합니다")
+        if len(set(v)) != len(v):
+            raise err(f"{label}: branches 에 같은 단계가 두 번 있습니다")
+        step.branches = list(v)
+    if "next" in sdata:
+        step.next = _target(sdata, "next", label, err)
+    if "max_visits" in sdata:
+        step.max_visits = _int_in(sdata, "max_visits", label, 1, MAX_VISITS, err)
     return step
+
+
+def _target(sdata: Mapping, key: str, label: str, err) -> str:
+    v = sdata.get(key)
+    if not isinstance(v, str) or not (v == END or ROLE_NAME_RE.match(v)):
+        raise err(f"{label}: {key} 는 단계 id 또는 \"{END}\" 여야 합니다: {v!r}")
+    return v
+
+
+def is_graph_steps(steps: list[Step]) -> bool:
+    """다음 단계·갈림·나란히·반복을 쓰면 그래프 형식 (DESIGN.md 36.30)."""
+    return any(s.kind in GRAPH_KINDS or s.next is not None or s.max_visits is not None for s in steps)
 
 
 def _check_order(steps: list[Step], err) -> None:

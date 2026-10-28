@@ -14,6 +14,7 @@ from __future__ import annotations
 import datetime as dt
 import shutil
 import sys
+import threading
 from dataclasses import dataclass, field, replace
 from pathlib import Path
 from typing import IO, Any, Callable, Mapping
@@ -32,6 +33,7 @@ from tenure.phases.build import BuildPhase
 from tenure.phases.common import PhaseContext, PhaseStop
 from tenure.phases.debate import DESIGN_FILENAME, DebatePhase
 from tenure.phases.extra import run_audit, run_explore
+from tenure.graph_run import GraphRunner
 from tenure.report import REPORT_ROLE, run_report
 from tenure.registry import register_quietly
 from tenure.runner import env_drops
@@ -127,9 +129,14 @@ class Orchestrator:
         self.role_factory = role_factory or make_role_agents
         self._console: IO[str] | None = None
         self._events: events.EventLog | None = None
+        self._log_lock = threading.Lock()          # 나란히 단계는 스레드에서 로그를 남긴다 (DESIGN.md 36.30)
 
     # ---------------------------------------------------------------- log
     def log(self, msg: str) -> None:
+        with self._log_lock:
+            self._log(msg)
+
+    def _log(self, msg: str) -> None:
         line = f"[{dt.datetime.now():%H:%M:%S}] {msg}"
         self.printer(line)
         if self._events is not None:              # 화면의 실시간 타임라인 (DESIGN.md 36.3)
@@ -321,7 +328,12 @@ class Orchestrator:
         design_only = bool(state.config.get("design_only"))
         approved: bool | None = None
         try:
-            for step in wf.steps:
+            if wf.is_graph:                            # 갈림·반복·나란히 (DESIGN.md 36.30)
+                result = GraphRunner(ctx, wf).run(design_only=design_only)
+                if result.design_stop:
+                    return self._design_done(ctx, workdir, run_dir, "design_only")
+                approved = result.approved
+            for step in ([] if wf.is_graph else wf.steps):
                 if step.kind == "explore":
                     run_explore(ctx, step)
                 elif step.kind == "debate":
