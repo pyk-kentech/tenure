@@ -1,4 +1,4 @@
-"""M45 자유 그래프 워크플로 (DESIGN.md 36.30): 갈림·이어서 고치기·나란히·반복 상한."""
+"""M45 자유 그래프 워크플로 (DESIGN.md 36.30): 분기·추가 수정·병렬 실행·반복 상한."""
 
 from __future__ import annotations
 
@@ -39,14 +39,14 @@ def test_graph_format_is_detected_and_round_trips():
 
 @pytest.mark.parametrize("steps, msg", [
     ([*RESCUE, {"kind": "audit", "id": "a1", "roles": ["aud1"]}], "겹치면 안 됩니다"),
-    ([{**RESCUE[0]}, {**RESCUE[1], "yes": "nowhere"}, *RESCUE[2:]], "없는 단계"),
+    ([{**RESCUE[0]}, {**RESCUE[1], "yes": "nowhere"}, *RESCUE[2:]], "존재하지 않는 단계"),
     ([RESCUE[0], {"kind": "parallel", "id": "p", "branches": ["b", "a1"]}, {**RESCUE[0], "id": "b"},
       RESCUE[4]], "build 단계는 하나만"),
     ([RESCUE[0], {"kind": "parallel", "id": "p", "branches": ["r", "a1"]},
-      {"kind": "continue", "id": "r", "implementer": "fixer", "reviewers": ["rev2"]}, RESCUE[4]], "읽기만 하는"),
+      {"kind": "continue", "id": "r", "implementer": "fixer", "reviewers": ["rev2"]}, RESCUE[4]], "읽기 전용"),
     ([{**RESCUE[0], "max_visits": 2}, RESCUE[4]], "max_visits"),
     ([RESCUE[0], {"kind": "audit", "id": "a1", "roles": ["aud1"], "next": "end"},
-      {"kind": "audit", "id": "lost", "roles": ["aud2"]}], "닿지 않는"),
+      {"kind": "audit", "id": "lost", "roles": ["aud2"]}], "도달할 수 없는"),
     ([{"kind": "explore", "role": "dev", "next": "end"},
       {"kind": "continue", "id": "r", "implementer": "fixer", "reviewers": ["rev2"]}], "build"),
     ([{**RESCUE[1], "yes": "end", "no": "end"}, RESCUE[0]], "build"),
@@ -82,7 +82,7 @@ def test_branch_continue_and_parallel_audits(tmp_path, monkeypatch):
     assert rc == 0 and st.status == "done_approved"
     assert st.graph["decisions"] == {"ok#1": "no", "ok#2": "yes"}
     assert [c.step for c in agents["rev"].calls] == ["review", "arbitrate"]   # build 는 1회에서 미승인
-    assert [c.step for c in agents["fixer"].calls] == ["fix", "fix"]   # 이어서 고치기 2회
+    assert [c.step for c in agents["fixer"].calls] == ["fix", "fix"]   # 추가 수정 2회
     assert st.graph["continue"] == {"rescue": 3} and len(st.review_history) == 3
     assert set(st.audits) == {"a1", "a2"} and st.graph["last_audits"] == ["a1", "a2"]
 
@@ -104,7 +104,7 @@ def test_parallel_audits_really_run_together(tmp_path, monkeypatch):
 
 
 def test_loop_stops_at_max_visits(tmp_path, monkeypatch):
-    # 테스트 명령이 없어 tests_pass 는 늘 아니오 → 고치기 ↔ 갈림을 돌다가 상한에서 멈춘다
+    # 테스트 명령이 없어 tests_pass 는 늘 아니오 → 추가 수정 ↔ 분기를 돌다가 상한에서 멈춘다
     steps = [{**RESCUE[0], "max_review": 1},
              {"kind": "branch", "id": "t", "check": "tests_pass", "yes": "end", "no": "fix", "max_visits": 3},
              {"kind": "continue", "id": "fix", "implementer": "fixer", "reviewers": ["rev2"], "rounds": 1,

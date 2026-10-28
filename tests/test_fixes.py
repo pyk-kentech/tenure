@@ -178,7 +178,7 @@ def test_lock_released_and_console_log_written(tmp_path: Path):
     run_dir = list_run_dirs(wd)[-1]
     assert not lock_path(wd).exists()
     console = (run_dir / "console.log").read_text(encoding="utf-8")
-    assert "실행 시작:" in console and "✅ 리뷰 승인으로 종료" in console
+    assert "실행 시작:" in console and "완료: 리뷰 승인으로 종료" in console
     assert console.splitlines()[0].startswith("[")
 
 

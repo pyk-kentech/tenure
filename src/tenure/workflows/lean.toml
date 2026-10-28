@@ -1,5 +1,5 @@
 name = "lean"
-description = "혼자 설계(토론 없음) → 구현 → 리뷰 · 쉬운 과제용(Sonnet), 가장 저렴"
+description = "단독 설계(토론 생략) → 구현 → 리뷰 · 간단한 과제용(Sonnet), 비용 최소"
 
 # 쉬운 과제는 구현자도 가벼운 모델로 충분하다. 리뷰(Codex)는 추론이 필요해 기본 모델 그대로 (DESIGN.md 30.6)
 [roles.claude]

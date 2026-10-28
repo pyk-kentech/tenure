@@ -1119,7 +1119,7 @@ def serve(host: str, port: int, *, open_browser: bool = True, extra_projects: li
         server = make_server(host, port, dashboard=dashboard, token=token)
     url = server.url()
     if not server.loopback:
-        printer(f"⚠️  {host} 에 바인딩합니다. 같은 네트워크에서 주소와 토큰을 아는 사람은 실행을 시작할 수 있습니다.")
+        printer(f"주의: {host} 에 바인딩합니다. 같은 네트워크에서 주소와 토큰을 아는 사람은 실행을 시작할 수 있습니다.")
         printer("   가능하면 기본값(127.0.0.1)과 SSH 터널을 쓰세요: ssh -L 8787:127.0.0.1:8787 <서버>")
     printer(f"tenure 관리자 UI: {url}")
     printer("종료: Ctrl-C  (UI 를 꺼도 UI 에서 시작한 실행은 계속 돕니다)")

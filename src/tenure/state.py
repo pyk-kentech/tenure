@@ -104,7 +104,7 @@ class RunState:
     dedup: dict[str, dict] = field(default_factory=dict)              # "round:역할" → 재제기 확인 결과 (DESIGN.md 26.2)
     reverts: dict[str, dict] = field(default_factory=dict)            # round → 되돌림 경고 (DESIGN.md 26.3)
     review_sessions: dict[str, dict] = field(default_factory=dict)    # 역할 → {id, round, rounds} (DESIGN.md 21.3)
-    graph: dict = field(default_factory=dict)                         # 그래프 워크플로: 갈림 결정·이어서 고치기 상한 (36.30)
+    graph: dict = field(default_factory=dict)                         # 그래프 워크플로: 분기 결정·추가 수정 상한 (36.30)
     design_doc: str | None = None    # 설계 문서(작업 폴더 기준). None 이면 DESIGN.md, 변경 설계면 docs/changes/<run>.md
     error: str | None = None
     created_at: str = field(default_factory=lambda: dt.datetime.now().isoformat(timespec="seconds"))

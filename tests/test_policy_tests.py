@@ -250,7 +250,7 @@ def test_stall_stops_and_resume_continues(tmp_path: Path, monkeypatch, capsys):
     monkeypatch.setattr(orch_mod, "make_agents", make)
     assert main(["run", "t", "--workdir", str(wd), "--mock", "--debate-rounds", "0", "--max-review", "8"]) == 1
     out = capsys.readouterr().out
-    assert "수렴 안 됨" in out and "--max-review" not in out.split("계속하려면")[-1]
+    assert "수렴하지 않음" in out and "--max-review" not in out.split("계속하려면")[-1]
     st = RunState.load(list_run_dirs(wd)[-1])
     assert st.stop_reason == "stalled" and st.round == 4 and st.status == DONE_UNAPPROVED
     assert [h["blocking"] for h in st.review_history] == [3, 1, 2, 1]

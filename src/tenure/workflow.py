@@ -120,7 +120,7 @@ class Step:
     design: str | None = None                                # build: None/"doc" = DESIGN.md, "task" = 과제 원문을 설계로 (36.5)
     rivals: list[str] = field(default_factory=list)          # build: 경쟁 초안의 맞수 (36.15)
     roles: list[str] = field(default_factory=list)           # audit
-    # 그래프 형식 (DESIGN.md 36.30): 다음 단계, 갈림 조건·가지, 나란히 가지, 최대 반복
+    # 그래프 형식 (DESIGN.md 36.30): 다음 단계, 분기 조건·가지, 병렬 단계, 최대 반복
     next: str | None = None
     check: str | None = None
     yes: str | None = None
@@ -423,7 +423,7 @@ def _target(sdata: Mapping, key: str, label: str, err) -> str:
 
 
 def is_graph_steps(steps: list[Step]) -> bool:
-    """다음 단계·갈림·나란히·반복을 쓰면 그래프 형식 (DESIGN.md 36.30)."""
+    """다음 단계·분기·병렬 실행·반복을 쓰면 그래프 형식 (DESIGN.md 36.30)."""
     return any(s.kind in GRAPH_KINDS or s.next is not None or s.max_visits is not None for s in steps)
 
 

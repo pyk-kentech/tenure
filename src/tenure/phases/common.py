@@ -74,7 +74,7 @@ class PhaseContext:
     retries: int = 1
     # 워크플로 템플릿 (DESIGN.md 19장). None 이면 agents 의 키가 곧 CLI 이름(classic)
     workflow: "Workflow | None" = None
-    # 나란히 단계(DESIGN.md 36.30)가 기록 번호 매기기·상태 저장을 줄 세우는 잠금
+    # 병렬 실행 단계(DESIGN.md 36.30)가 기록 번호 매기기·상태 저장을 줄 세우는 잠금
     lock: threading.RLock = field(default_factory=threading.RLock, repr=False, compare=False)
 
     # ---------------------------------------------------------------- roles

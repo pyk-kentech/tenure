@@ -45,7 +45,7 @@ def test_full_run_approved(tmp_path: Path, capsys):
     assert (wd / "DESIGN.md").exists() and (wd / "main.py").exists()
     assert ".tenure/" in (wd / ".gitignore").read_text(encoding="utf-8")
     out = capsys.readouterr().out
-    assert "설계안 작성: claude" in out and "판정: APPROVED" in out and "✅" in out
+    assert "설계안 작성: claude" in out and "판정: APPROVED" in out and "완료:" in out
     assert "실행 시작:" in out and "mock" in out
 
 
@@ -142,7 +142,7 @@ def test_resume_after_failure(tmp_path: Path, monkeypatch, capsys):
     assert Workspace(wd).commit_count() == 2
     assert len(list_run_dirs(wd)) == 1
     out = capsys.readouterr().out
-    assert "이어하기:" in out and "✅" in out
+    assert "이어하기:" in out and "완료:" in out
 
 
 def test_resume_after_rate_limit_keeps_roles(tmp_path: Path, monkeypatch):
@@ -219,7 +219,7 @@ def test_resume_unapproved_with_higher_max_review(tmp_path: Path, monkeypatch, c
 
     assert run_cli("resume", "--workdir", str(wd), "--max-review", "3") == 0
     out = capsys.readouterr().out
-    assert "리뷰 상한 1 → 3회" in out and "[2/3] 리뷰 반영: claude" in out and "✅" in out
+    assert "리뷰 상한 1 → 3회" in out and "[2/3] 리뷰 반영: claude" in out and "완료:" in out
     st = RunState.load(run_dir)
     assert st.status == DONE_APPROVED and st.config["max_review"] == 3
     # 미승인으로 끝날 때 만든 요약(06)은 이어서 리뷰를 더 돈 뒤 끝에서 새로 만든다(09)

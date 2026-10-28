@@ -129,7 +129,7 @@ class Orchestrator:
         self.role_factory = role_factory or make_role_agents
         self._console: IO[str] | None = None
         self._events: events.EventLog | None = None
-        self._log_lock = threading.Lock()          # 나란히 단계는 스레드에서 로그를 남긴다 (DESIGN.md 36.30)
+        self._log_lock = threading.Lock()          # 병렬 실행 단계는 스레드에서 로그를 남긴다 (DESIGN.md 36.30)
 
     # ---------------------------------------------------------------- log
     def log(self, msg: str) -> None:
@@ -328,7 +328,7 @@ class Orchestrator:
         design_only = bool(state.config.get("design_only"))
         approved: bool | None = None
         try:
-            if wf.is_graph:                            # 갈림·반복·나란히 (DESIGN.md 36.30)
+            if wf.is_graph:                            # 분기·반복·병렬 실행 (DESIGN.md 36.30)
                 result = GraphRunner(ctx, wf).run(design_only=design_only)
                 if result.design_stop:
                     return self._design_done(ctx, workdir, run_dir, "design_only")
@@ -398,17 +398,17 @@ class Orchestrator:
             raise
 
         if approved and state.stop_reason == "arbiter":
-            self.log("✅ 중재로 승인 (중재 결과: " + run_dir.joinpath((state.arbiter or {}).get("file") or "").name + ")")
+            self.log("완료: 중재로 승인 (중재 결과: " + run_dir.joinpath((state.arbiter or {}).get("file") or "").name + ")")
         elif approved:
-            self.log("✅ 리뷰 승인으로 종료")
+            self.log("완료: 리뷰 승인으로 종료")
         elif state.stop_reason in ("arbiter_upheld", "arbiter_final"):
-            self.log("⚠️ 중재 뒤에도 막는 지적이 남아 멈춥니다: " + ", ".join((state.arbiter or {}).get("upheld") or [])
+            self.log("주의: 중재 뒤에도 막는 지적이 남아 중단합니다: " + ", ".join((state.arbiter or {}).get("upheld") or [])
                      + f". 중재 결과와 마지막 리뷰를 보고 직접 판단하세요: {run_dir}")
         elif state.stop_reason == "stalled":
             self.log(f"계속하려면: tenure resume --workdir {workdir}"
                      + (f" --max-review {min(cfg.max_review + 1, 10)}" if state.round >= cfg.max_review else ""))
         else:
-            self.log(f"⚠️ {cfg.max_review}회 안에 승인되지 않음. 마지막 리뷰를 확인하세요: "
+            self.log(f"주의: {cfg.max_review}회 안에 승인되지 않았습니다. 마지막 리뷰를 확인하세요: "
                      f"{run_dir / (state.last_review or '')}")
             self.log(f"계속하려면: tenure resume --workdir {workdir} --max-review {min(cfg.max_review + 1, 10)}")
         self.log(f"전체 대화 기록: {run_dir}")

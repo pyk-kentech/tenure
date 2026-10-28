@@ -217,7 +217,7 @@ class BuildPhase:
                     st.stop_reason = "stalled"
                     ctx.set_position(PHASE_DONE, "stalled", i)
                     ctx.save()
-                    ctx.log(f"⚠️ 수렴 안 됨: 막는 지적 수가 {self.cfg.stall_rounds}라운드 연속 줄지 않아 멈춥니다 "
+                    ctx.log(f"주의: 수렴하지 않음: 막는 지적 수가 {self.cfg.stall_rounds}라운드 연속 줄지 않아 멈춥니다 "
                             f"({self._blocking_series()}). 마지막 리뷰를 보고 직접 판단하세요.")
                     return False
                 ctx.save()
@@ -644,7 +644,7 @@ class BuildPhase:
             found = revert.find_reverts(self.ws, prev, points, st.issues, exclude=(ctx.design_doc,))
             if found:
                 st.reverts[str(i)] = {"since": prev, "reverts": [r.to_dict() for r in found]}
-                ctx.log(f"[{i}/{self.max_review}] ⚠️ 되돌림 감지: "
+                ctx.log(f"[{i}/{self.max_review}] 주의: 되돌림 감지: "
                         + ", ".join(f"{r.file}({'/'.join(r.issues)})" for r in found))
         st.mark_done(key)
         ctx.save()
@@ -731,7 +731,7 @@ class BuildPhase:
                 "rate_limited": False, "timed_out": False})
             st.test_guard[str(i)] = {"since": frm, "signals": signals, "file": path.name}
             kinds = sorted({testguard.KIND_KO.get(s["kind"], s["kind"]) for s in signals})
-            ctx.log(f"[{i}/{self.max_review}] ⚠️ 테스트 변경 감지 {len(signals)}건 ({', '.join(kinds)}) → {path.name}")
+            ctx.log(f"[{i}/{self.max_review}] 주의: 테스트 변경 감지 {len(signals)}건 ({', '.join(kinds)}) → {path.name}")
         st.mark_done(key)
         ctx.save()
 

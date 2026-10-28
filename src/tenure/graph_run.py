@@ -1,10 +1,10 @@
 """그래프 형식 워크플로 실행 (DESIGN.md 36.30 M45).
 
 시작 단계부터 선을 따라간다. 블록(explore·debate·build·audit)은 기존 Phase 를 그대로 부르고,
-갈림(branch)은 상태를 보고 길을 고르며, 이어서 고치기(continue)는 끝난 구현+리뷰에 라운드를 더하고,
-나란히(parallel)는 읽기 전용 가지를 스레드로 동시에 돌린다.
+분기(branch)는 상태를 보고 길을 고르며, 추가 수정(continue)은 끝난 구현+리뷰에 라운드를 더하고,
+병렬 실행(parallel)은 읽기 전용 가지를 스레드로 동시에 돌린다.
 
-같은 단계를 두 번째로 돌면 id 에 `_2` 를 붙여 기록·완료 표시를 따로 둔다. 갈림 결과와 이어서 고치기의
+같은 단계를 두 번째로 돌면 id 에 `_2` 를 붙여 기록·완료 표시를 따로 둔다. 분기 결과와 추가 수정의
 상한은 state.graph 에 남겨 resume 이 같은 길을 다시 걷는다.
 """
 
@@ -47,7 +47,7 @@ class GraphRunner:
             n = visits.get(cur, 0) + 1
             limit = step.max_visits or 1
             if n > limit:
-                self.ctx.log(f"반복 상한: {cur} 단계를 {limit}번 돌아 여기서 끝냅니다.")
+                self.ctx.log(f"반복 상한: {cur} 단계를 {limit}회 실행해 여기서 종료합니다.")
                 self.g["stopped_at"] = cur
                 break
             visits[cur] = n
@@ -93,7 +93,7 @@ class GraphRunner:
         if decided is None:
             decided = "yes" if self._check(step.check or "") else "no"
             self.g["decisions"][key] = decided
-            self.ctx.log(f"갈림 {step.id}({step.check}): {'예' if decided == 'yes' else '아니오'}")
+            self.ctx.log(f"분기 {step.id}({step.check}): {'예' if decided == 'yes' else '아니오'}")
             self.ctx.save()
         target = step.yes if decided == "yes" else step.no
         return target or END
@@ -132,8 +132,8 @@ class GraphRunner:
         st.status, st.stop_reason, st.error = RUNNING, None, None
         st.stall_baseline_round = st.round        # 정체 판단은 여기서 다시 센다 (resume 과 같음)
         st.config["max_review"] = target
-        self.ctx.log(f"이어서 고치기 {inst.id}: {inst.implementer} 가 리뷰 {', '.join(inst.reviewers)} 와 "
-                     f"{target}회까지 더 돕니다.")
+        self.ctx.log(f"추가 수정 {inst.id}: {inst.implementer} 가 리뷰어 {', '.join(inst.reviewers)} 와 "
+                     f"{target}회차까지 진행합니다.")
         self.ctx.save()
         build = Step(kind="build", id="build", implementer=inst.implementer, reviewers=list(inst.reviewers))
         phase = BuildPhase(self.ctx, step=build)
@@ -148,7 +148,7 @@ class GraphRunner:
         for b in branches:
             if b.kind == "audit":
                 self._need_build(b)
-        self.ctx.log(f"나란히 {step.id}: {', '.join(b.id for b in branches)} 를 동시에 돌립니다.")
+        self.ctx.log(f"병렬 실행 {step.id}: {', '.join(b.id for b in branches)} 를 동시에 실행합니다.")
         errors: list[BaseException] = []
 
         def work(b: Step) -> None:
@@ -172,6 +172,6 @@ class GraphRunner:
     def _need_build(self, inst: Step) -> None:
         if self.st.base_commit is None:
             self.st.status = FAILED
-            self.st.error = f"{inst.id}: 구현+리뷰(build)가 아직 돌지 않아 이 단계를 할 수 없습니다. 워크플로의 선을 확인하세요."
+            self.st.error = f"{inst.id}: 구현+리뷰(build) 단계가 아직 실행되지 않아 이 단계를 진행할 수 없습니다. 워크플로의 연결을 확인하세요."
             self.ctx.save()
             raise PhaseStop(self.st.error, FAILED)

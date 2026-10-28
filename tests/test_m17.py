@@ -138,7 +138,7 @@ def test_stall_then_arbiter_approves(tmp_path, monkeypatch, capsys):
     arb_call = [c for c in seen["codex"].calls if c.step == "arbitrate"][0]
     assert "- I1 [P2] 예외 처리 없음" in arb_call.prompt and arb_call.output_schema == arb.ARBITER_SCHEMA
     assert "막는 지적 수가 줄지 않음" in arb_call.prompt
-    assert "✅ 중재로 승인" in capsys.readouterr().out
+    assert "완료: 중재로 승인" in capsys.readouterr().out
 
 
 def test_arbiter_upholds_then_final_round_approves(tmp_path, monkeypatch):

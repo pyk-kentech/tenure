@@ -165,7 +165,7 @@ def test_build_warns_reviewer_about_weakened_tests(tmp_path, monkeypatch, capsys
     reviews = [c for c in seen["codex"].calls if c.step == "review"]
     assert "[테스트 변경 경고]" not in reviews[0].prompt
     assert "[테스트 변경 경고] tenure 가 지난 리뷰 이후" in reviews[1].prompt and "`tests/test_a.py`" in reviews[1].prompt
-    assert "⚠️ 테스트 변경 감지 2건" in capsys.readouterr().out
+    assert "주의: 테스트 변경 감지 2건" in capsys.readouterr().out
     assert "guard:1" in st.done and "guard:2" in st.done
 
 
