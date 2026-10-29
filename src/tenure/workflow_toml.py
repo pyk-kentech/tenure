@@ -50,13 +50,14 @@ def dump_workflow(data: Mapping[str, Any]) -> str:
         lines += ["", "[[steps]]"]
         lines += [f"{_key(str(k))} = {_value(v)}" for k, v in step.items() if v not in (None, "", [])]
     editor = data.get("editor") or {}
-    if editor.get("nodes") or editor.get("ties"):
+    if any(editor.get(k) for k in ("nodes", "ties", "bends", "groups")):
         lines += ["", "[editor]"]
         if editor.get("nodes"):
             lines.append(f"nodes = {_value(editor['nodes'])}")
-        for tie in editor.get("ties") or []:
-            lines += ["", "[[editor.ties]]"]
-            lines += [f"{_key(str(k))} = {_value(v)}" for k, v in tie.items()]
+        for table in ("ties", "bends", "groups"):          # 꺾는 점·그룹 상자 (36.39)
+            for item in editor.get(table) or []:
+                lines += ["", f"[[editor.{table}]]"]
+                lines += [f"{_key(str(k))} = {_value(v)}" for k, v in item.items()]
     text = "\n".join(lines).lstrip("\n") + "\n"
     tomllib.loads(text)  # 쓴 것이 다시 읽히는지
     return text

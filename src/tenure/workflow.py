@@ -63,6 +63,9 @@ _TOP_KEYS = {"name", "description", "roles", "steps", "editor"}
 MAX_EDITOR_NODES = 500
 MAX_TIES = 200
 MAX_TIE_WIRES = 64
+MAX_BENDS = 500                # 꺾는 점 (36.39)
+MAX_GROUPS = 100               # 그룹 상자 (36.39)
+MAX_GROUP_TITLE = 80
 _COORD_LIMIT = 1_000_000
 _NODE_KEY = r"(?:role:[a-z][a-z0-9_]{0,23}|step:[1-9][0-9]{0,3})"
 _NODE_KEY_RE = re.compile(rf"^{_NODE_KEY}$")
@@ -273,7 +276,7 @@ def parse_workflow(data: Mapping[str, Any], *, name_hint: str, source: str, wher
 
 
 def _parse_editor(raw: Any) -> dict[str, Any]:
-    """편집 화면 배치(노드 위치·선 묶기, DESIGN.md 36.34). 화면용이라 형식이 틀린 항목은 오류 없이 버린다."""
+    """편집 화면 배치(노드 위치·선 묶기 36.34, 꺾는 점·그룹 상자 36.39). 화면용이라 형식이 틀린 항목은 오류 없이 버린다."""
     if not isinstance(raw, Mapping):
         return {}
 
@@ -299,11 +302,31 @@ def _parse_editor(raw: Any) -> dict[str, Any]:
             kept = list(dict.fromkeys(w for w in wires if isinstance(w, str) and _WIRE_RE.match(w)))
             if kept:
                 ties.append({"x": x, "y": y, "angle": angle % 360, "wires": kept[:MAX_TIE_WIRES]})
+    bends: list[dict[str, Any]] = []                 # 꺾는 점: 선 하나가 지나는 점 (36.39)
+    raw_bends = raw.get("bends")
+    if isinstance(raw_bends, list):
+        for b in raw_bends[:MAX_BENDS]:
+            if (isinstance(b, Mapping) and isinstance(b.get("wire"), str) and _WIRE_RE.match(b["wire"])
+                    and coord(b.get("x")) and coord(b.get("y"))):
+                bends.append({"wire": b["wire"], "x": b["x"], "y": b["y"]})
+    groups: list[dict[str, Any]] = []                # 그룹 상자: 제목 붙은 사각형 (36.39)
+    raw_groups = raw.get("groups")
+    if isinstance(raw_groups, list):
+        for g in raw_groups[:MAX_GROUPS]:
+            if not isinstance(g, Mapping):
+                continue
+            x, y, w, h, title = g.get("x"), g.get("y"), g.get("w"), g.get("h"), g.get("title", "")
+            if (all(coord(v) for v in (x, y, w, h)) and w > 0 and h > 0 and isinstance(title, str)):
+                groups.append({"title": title[:MAX_GROUP_TITLE], "x": x, "y": y, "w": w, "h": h})
     out: dict[str, Any] = {}
     if nodes:
         out["nodes"] = nodes
     if ties:
         out["ties"] = ties
+    if bends:
+        out["bends"] = bends
+    if groups:
+        out["groups"] = groups
     return out
 
 
