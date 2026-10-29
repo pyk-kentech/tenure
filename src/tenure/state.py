@@ -96,6 +96,7 @@ class RunState:
     test_guard: dict[str, dict] = field(default_factory=dict)         # round → 테스트 변경 경고 (DESIGN.md 24.1)
     route: dict | None = None                                         # auto 가 고른 워크플로와 이유 (36.5)
     seen_at: str | None = None                                        # 화면에서 끝난 실행을 연 시각 (36.3.1)
+    archived_at: str | None = None                                    # 플로 목록에서 보관한 시각 (36.37)
     race: dict | None = None                                          # 경쟁 초안: 초안별 결과·승자·이유 (36.15)
     followups: list[dict] = field(default_factory=list)              # 끝난 뒤 덧붙인 라운드(충돌 해결·줄 메모, 36.14)
     worktree: dict | None = None                                      # worktree 에서 돌면 {project, branch, base_branch, base_commit} (36.14)
@@ -158,8 +159,10 @@ class RunState:
         known = {f for f in cls.__dataclass_fields__}
         return cls(**{k: v for k, v in data.items() if k in known})
 
-    def save(self, run_dir: Path) -> Path:
-        self.updated_at = dt.datetime.now().isoformat(timespec="seconds")
+    def save(self, run_dir: Path, *, touch: bool = True) -> Path:
+        """touch=False: 화면의 표시만 바꿀 때(보관 등). 실행이 마지막으로 움직인 시각을 그대로 둔다."""
+        if touch:
+            self.updated_at = dt.datetime.now().isoformat(timespec="seconds")
         run_dir = Path(run_dir)
         run_dir.mkdir(parents=True, exist_ok=True)
         path = run_dir / RUN_JSON

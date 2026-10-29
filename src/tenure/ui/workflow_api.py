@@ -5,17 +5,19 @@
 
 from __future__ import annotations
 
+import re
 import tomllib
 from pathlib import Path
 from typing import Any, Mapping
 
-from tenure.config import CLASSIC_WORKFLOW, WORKFLOW_NAME_RE, Config, ConfigError, load_config
+from tenure.config import AUTO_WORKFLOW, CLASSIC_WORKFLOW, WORKFLOW_NAME_RE, Config, ConfigError, load_config
 from tenure.registry import tenure_home
 from tenure.workflow import (
     PROJECT_DIR,
     WorkflowError,
     Workflow,
     _search,
+    builtin_names,
     check_templates,
     classic,
     describe,
@@ -98,25 +100,52 @@ def workflow_check(d: Any, payload: Mapping[str, Any]) -> dict[str, Any]:
     return {"ok": True, "summary": wf.summary(), "workflow": describe(wf)}
 
 
+def _slug(title: str) -> str:
+    """보이는 이름에서 파일 이름 후보를 만든다. 한글처럼 못 쓰는 글자만 있으면 "workflow"."""
+    s = re.sub(r"[^a-z0-9]+", "-", title.lower()).strip("-")[:40].strip("-")
+    return s if s and WORKFLOW_NAME_RE.match(s) else "workflow"
+
+
+def _free_id(base: str, folder: Path) -> str:
+    """폴더에 없고 내장·classic·auto 를 가리지 않는 파일 이름 (base, base-2, base-3 …)."""
+    taken = {CLASSIC_WORKFLOW, AUTO_WORKFLOW, *builtin_names()}
+    for n in range(1, 1000):
+        wid = base if n == 1 else f"{base[:36]}-{n}"
+        if wid not in taken and not (folder / f"{wid}.toml").exists():
+            return wid
+    raise ApiError(409, "저장할 파일 이름을 정하지 못했습니다. 이름을 바꿔 보세요.")
+
+
 def workflow_save(d: Any, payload: Mapping[str, Any]) -> dict[str, Any]:
+    """저장. title(보이는 이름, 한글 가능)만 주면 파일 이름은 엔진이 정한다(DESIGN.md 36.37 M52).
+    id 를 주면 그 파일에 저장한다(덮어쓰려면 overwrite). 옛 호출처럼 name 만 주면 name 이 파일 이름."""
     wd = _workdir(d, payload.get("project"))
-    name = str(payload.get("name") or "").strip()
-    if not WORKFLOW_NAME_RE.match(name) or name == CLASSIC_WORKFLOW:
-        raise ApiError(400, "저장 이름은 영문 소문자·숫자로 시작하고 소문자·숫자·_·- 40자 이하여야 합니다 (classic 은 쓸 수 없음).")
+    title = str(payload.get("title") or "").strip()
+    wid = str(payload.get("id") or ("" if title else payload.get("name")) or "").strip()
+    if len(title) > 80:
+        raise ApiError(400, "이름은 80자까지 쓸 수 있습니다.")
+    if wid and (not WORKFLOW_NAME_RE.match(wid) or wid == CLASSIC_WORKFLOW):
+        raise ApiError(400, "파일 이름은 영문 소문자·숫자·_·- 로 40자까지 쓸 수 있습니다 (classic 은 쓸 수 없음).")
+    if not wid and not title:
+        raise ApiError(400, "이름을 입력하세요.")
     scope = str(payload.get("scope") or "project")
     if scope not in SCOPES:
         raise ApiError(400, f"저장 위치가 잘못되었습니다: {scope!r}")
     if scope == "project" and wd is None:
         raise ApiError(400, "프로젝트에 저장하려면 프로젝트 폴더가 필요합니다.")
+    data = payload.get("workflow")
+    if title and isinstance(data, Mapping):
+        payload = {**payload, "workflow": {**data, "name": title}}
     try:
         wf = _parse(payload, wd)
     except WorkflowError as e:
         raise ApiError(400, str(e)) from e
     folder = (wd / PROJECT_DIR) if scope == "project" and wd is not None else tenure_home() / "workflows"
-    path = folder / f"{name}.toml"
+    wid = wid or _free_id(_slug(title), folder)
+    path = folder / f"{wid}.toml"
     if path.exists() and not payload.get("overwrite"):
         raise ApiError(409, f"같은 이름의 워크플로가 이미 있습니다: {path}")
     text = dump_workflow(_definition(wf))
     folder.mkdir(parents=True, exist_ok=True)
     path.write_text(text, encoding="utf-8")
-    return {"id": name, "scope": scope, "path": str(path), "summary": wf.summary()}
+    return {"id": wid, "name": wf.name, "scope": scope, "path": str(path), "summary": wf.summary()}

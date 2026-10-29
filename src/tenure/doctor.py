@@ -264,6 +264,11 @@ def _codex_check() -> Check:
     return c
 
 
+def login_check(agent: str) -> Check:
+    """한 CLI 의 설치·로그인 상태 (실행 전 확인, DESIGN.md 36.37)."""
+    return _claude_check() if agent == "claude" else _codex_check()
+
+
 def ready(checks: list[dict[str, Any]]) -> bool:
     """tenure 를 실제 CLI 로 돌릴 수 있는가 (git + 두 CLI 설치·로그인)."""
     by = {c["id"]: c for c in checks}

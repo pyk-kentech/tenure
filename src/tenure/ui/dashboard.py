@@ -12,6 +12,8 @@ import datetime as dt
 import json
 import os
 import re
+import shutil
+import stat
 import sys
 import threading
 from dataclasses import asdict, dataclass, field
@@ -34,7 +36,7 @@ from tenure.lock import lock_path, read_lock
 from tenure.orchestrator import CONSOLE_LOG
 from tenure.phases.build import build_review_diff
 from tenure.phases.debate import BACKUP_FILENAME, DESIGN_FILENAME
-from tenure.doctor import ready, run_checks
+from tenure.doctor import login_check, ready, run_checks
 from tenure.registry import Registry, tenure_home, normalize
 from tenure.runner import ExecutableNotFound, pid_alive, spawn_detached
 from tenure.agents.claude_code import load_claude_limits
@@ -46,7 +48,7 @@ from tenure.workspace import GitError, Workspace, WorkdirRefused, check_workdir
 
 MAX_VERDICT_CACHE = 2048
 SUMMARY_KEYS = ("run_id", "status", "phase", "step", "round", "task", "created_at", "updated_at", "calls", "total_sec",
-                "last_verdict", "config", "error")
+                "last_verdict", "config", "error", "archived_at")
 RUN_ID_RE = re.compile(r"^\d{8}-\d{6}(?:-\d+)?$")
 ENTRY_RE = re.compile(r"^(?:drafts/[a-z0-9][a-z0-9_-]{0,31}/)?\d{2,}_[\w.\-]+\.md$")   # 초안 기록 포함 (36.15)
 COMMIT_RE = re.compile(r"^[0-9a-f]{7,40}$")
@@ -111,6 +113,7 @@ class Dashboard:
     _dirs: RunDirs = field(default_factory=RunDirs)
     _locks: StatCache = field(default_factory=lambda: StatCache(1024))
     _lock_paths: TtlCache = field(default_factory=lambda: TtlCache(ttl=30.0))   # project_dir(옛 .duet 옮기기 확인) 결과
+    _logins: TtlCache = field(default_factory=lambda: TtlCache(ttl=60.0))       # CLI 로그인 상태 (36.37)
 
     # ================================================================ validation
     def project(self, path: str | None) -> Path:
@@ -301,6 +304,34 @@ class Dashboard:
         st.save(rd)
         return {"ok": True, "seen_at": st.seen_at}
 
+    def archive_run(self, payload: dict[str, Any]) -> dict[str, Any]:
+        """플로 목록에서 숨기거나(보관) 다시 꺼낸다. 기록은 그대로 둔다 (DESIGN.md 36.37 M52)."""
+        wd = self.project(payload.get("project"))
+        rd = self.run_dir(wd, payload.get("run"))
+        if self._run_live(rd):
+            raise ApiError(409, "진행 중인 플로는 보관할 수 없습니다.")
+        st = RunState.load(rd)
+        st.archived_at = dt.datetime.now().isoformat(timespec="seconds") if payload.get("archived", True) else None
+        st.save(rd, touch=False)                       # 목록의 걸린 시간이 바뀌지 않게
+        return {"ok": True, "archived_at": st.archived_at}
+
+    def delete_run(self, payload: dict[str, Any]) -> dict[str, Any]:
+        """플로 기록 폴더를 지운다. 진행 중이거나 반영·버리기 전인 따로 브랜치가 있으면 거절 (36.37 M52)."""
+        wd = self.project(payload.get("project"))
+        rd = self.run_dir(wd, payload.get("run"))
+        if self._run_live(rd):
+            raise ApiError(409, "진행 중인 플로는 지울 수 없습니다. 먼저 멈추세요.")
+        t = worktree.find(wd, rd.name)
+        if t is not None and t.status == worktree.OPEN:
+            raise ApiError(409, "이 플로의 변경이 아직 따로 브랜치에 있습니다. 먼저 반영하거나 버리세요.")
+
+        def unlock(fn: Any, path: str, _exc: Any) -> None:   # 윈도의 읽기 전용 파일
+            os.chmod(path, stat.S_IWRITE)
+            fn(path)
+
+        shutil.rmtree(rd, onerror=unlock)
+        return {"ok": True, "deleted": rd.name}
+
     def inbox(self, limit: int = 50, per_project: int = 20) -> dict[str, Any]:
         """프로젝트를 가로질러 주의 순으로: 나를 기다림 > 끝났는데 안 봄 > 진행 중 (DESIGN.md 36.7 받은편지함)."""
         items: list[dict[str, Any]] = []
@@ -310,8 +341,8 @@ class Dashboard:
                 continue
             for rd in list(reversed(self._run_dirs(wd)))[:per_project]:
                 summary = self._run_summary(wd, rd)
-                if (summary.get("worktree") or {}).get("status") == worktree.DISCARDED:
-                    continue                                   # 버린 작업은 더 볼 일이 없다 (36.14)
+                if (summary.get("worktree") or {}).get("status") == worktree.DISCARDED or summary.get("archived_at"):
+                    continue                                   # 버린·보관한 작업은 더 볼 일이 없다 (36.14, 36.37)
                 act = summary.get("activity") or {}
                 if act.get("state") in ("blocked", "done-unseen", "working", "unverifiable") or (
                         act.get("state") == "failed" and summary.get("status") == RUNNING):
@@ -926,7 +957,8 @@ class Dashboard:
             if not wd.is_dir() or bench_root_of(wd) is not None:
                 continue
             items = [self._run_summary(wd, rd) for rd in list(reversed(self._run_dirs(wd)))[:per_project]]
-            items = [it for it in items if (it.get("worktree") or {}).get("status") != worktree.DISCARDED]
+            items = [it for it in items
+                     if (it.get("worktree") or {}).get("status") != worktree.DISCARDED and not it.get("archived_at")]
             for it in items:
                 st = (it.get("activity") or {}).get("state")
                 if st:
@@ -952,7 +984,7 @@ class Dashboard:
                     "calls": len(st.calls), "total_sec": round(sum(c.sec for c in st.calls), 1),
                     "last_verdict": st.last_verdict, "config": st.config, "error": st.error,
                     "seen_at": st.seen_at, "limit_wait": st.limit_wait, "worktree": bool(st.worktree),
-                    "usage": st.usage_totals(), "race": bool(st.race)}
+                    "usage": st.usage_totals(), "race": bool(st.race), "archived_at": st.archived_at}
         return self._bases.get(rd / "run.json", load)
 
     # ---------------------------------------------------------------- 읽기 캐시 (36.18)
@@ -1079,6 +1111,47 @@ class Dashboard:
             "tenure": {"by_agent": by_agent, "by_day": dict(sorted(by_day.items(), reverse=True)[:14]),
                      "projects": projects},
         }
+
+    def preflight(self, project: str | None, workflow: str | None) -> dict[str, Any]:
+        """실제 실행 전에 맡을 CLI 의 설치·로그인 상태와 최근 '로그인 필요' 멈춤 (DESIGN.md 36.37 M52).
+        알려 주기만 하고 막지는 않는다. 로그인 확인은 프롬프트를 보내지 않는 status 명령뿐."""
+        wd: Path | None = None
+        if project:
+            try:
+                wd = _workflow_api().workdir_of(self, project)
+            except ApiError:
+                wd = None
+        agents = list(AGENT_NAMES)
+        if workflow and workflow not in ("auto", CLASSIC_WORKFLOW):
+            try:
+                wf = load_workflow(workflow, wd, load_config(wd))
+                agents = [a for a in AGENT_NAMES if a in {wf.roles[r].agent for r in wf.used_roles()}]
+            except (WorkflowError, ConfigError):
+                pass
+        last: dict[str, tuple[str, str | None]] = {}       # CLI → (실행, 마지막 호출의 이유)
+        for rd in (list(reversed(self._run_dirs(wd)))[:5] if wd is not None else []):
+            try:
+                calls = self._state(rd).calls
+            except (OSError, ValueError, TypeError):
+                continue
+            for c in reversed(calls):
+                last.setdefault(c.agent, (rd.name, c.reason))
+        out = []
+        for a in agents:
+            c = self._logins.get(a, lambda a=a: login_check(a))
+            ok = c.status == "ok" and bool(c.extra.get("logged_in"))
+            run_id, reason = last.get(a, ("", None))
+            if c.status == "missing":
+                warn = f"{c.name} 가 설치되어 있지 않습니다. 이대로 시작하면 {a} 차례에서 멈춥니다."
+            elif not ok:
+                warn = f"{c.name} 에 로그인되어 있지 않습니다. 이대로 시작하면 {a} 차례에서 멈춥니다."
+            elif reason == "로그인 필요":
+                warn = (f"최근 플로({run_id})에서 {c.name} 가 로그인이 필요하다며 멈췄습니다. "
+                        "로그인이 만료됐을 수 있으니 다시 로그인한 뒤 시작하세요.")
+            else:
+                warn = None
+            out.append({"agent": a, "logged_in": ok, "warning": warn})
+        return {"agents": out, "warnings": [x["warning"] for x in out if x["warning"]]}
 
     def doctor(self) -> dict[str, Any]:
         checks = run_checks()
@@ -1230,11 +1303,14 @@ API_METHODS: dict[str, Any] = {
     "usage": lambda d, a: d.usage_summary(),
     "activity": lambda d, a: d.activity(a.get("project"), a.get("run")),
     "doctor": lambda d, a: d.doctor(),
+    "preflight": lambda d, a: d.preflight(a.get("project"), a.get("workflow")),
     "defaults": lambda d, a: d._defaults(None),
     "workflows": lambda d, a: d.workflows(a.get("project")),
     "list_dirs": lambda d, a: list_dirs(a.get("path")),
     "events": lambda d, a: d.events(a.get("project"), a.get("run"), int(a.get("since") or 0)),
     "mark_seen": lambda d, a: d.mark_seen(a.get("project"), a.get("run")),
+    "archive_run": lambda d, a: d.archive_run(a),
+    "delete_run": lambda d, a: d.delete_run(a),
     "inbox": lambda d, a: d.inbox(),
     "works": lambda d, a: d.works(),
     "merge_check": lambda d, a: d.merge_check(a.get("project"), a.get("run")),

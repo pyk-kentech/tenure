@@ -498,6 +498,10 @@ def _builtin_dir():
     return resources.files("tenure").joinpath("workflows")
 
 
+def builtin_names() -> list[str]:
+    return sorted(r.name[:-5] for r in _builtin_dir().iterdir() if r.name.endswith(".toml"))
+
+
 def _search(name: str, workdir: Path | None) -> tuple[str, str, str] | None:
     """(내용, 출처, 경로)"""
     from tenure.registry import tenure_home
