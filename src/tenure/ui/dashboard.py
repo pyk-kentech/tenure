@@ -114,6 +114,7 @@ class Dashboard:
     _locks: StatCache = field(default_factory=lambda: StatCache(1024))
     _lock_paths: TtlCache = field(default_factory=lambda: TtlCache(ttl=30.0))   # project_dir(옛 .duet 옮기기 확인) 결과
     _logins: TtlCache = field(default_factory=lambda: TtlCache(ttl=60.0))       # CLI 로그인 상태 (36.37)
+    _live_now: TtlCache = field(default_factory=lambda: TtlCache(ttl=0.3))      # 폴더별 진행 중 실행 (36.38)
 
     # ================================================================ validation
     def project(self, path: str | None) -> Path:
@@ -928,9 +929,13 @@ class Dashboard:
                 return None
             pid = data.get("pid") if isinstance(data, dict) else None
             return {"pid": pid, "run_id": data.get("run_id"), "started_at": data.get("started_at")}                 if isinstance(pid, int) and not isinstance(pid, bool) else None
-        path = self._lock_paths.get(str(wd), lambda: lock_path(wd))
-        info = self._locks.get(path, parse)
-        return dict(info) if info is not None and pid_alive(info["pid"]) else None
+        def look() -> dict[str, Any] | None:
+            path = self._lock_paths.get(str(wd), lambda: lock_path(wd))
+            info = self._locks.get(path, parse)
+            return dict(info) if info is not None and pid_alive(info["pid"]) else None
+        # 한 번의 목록 요청 안에서 같은 폴더(대부분 프로젝트 하나)를 수백 번 보지 않게 아주 잠깐 기억한다 (36.38)
+        info = self._live_now.get(str(wd), look)
+        return dict(info) if info is not None else None
 
     def _run_summary(self, wd: Path, rd: Path) -> dict[str, Any]:
         try:

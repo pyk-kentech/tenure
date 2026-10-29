@@ -11,6 +11,7 @@
 from __future__ import annotations
 
 import datetime as dt
+import os
 import re
 from dataclasses import dataclass, field
 from pathlib import Path
@@ -68,11 +69,13 @@ class Transcript:
         out: list[Entry] = []
         if not self.dir.is_dir():
             return out
-        for p in sorted(self.dir.iterdir()):
-            m = _FILE_RE.match(p.name)
-            if not m or not p.is_file():
+        with os.scandir(self.dir) as it:
+            found = sorted((e for e in it if _FILE_RE.match(e.name)), key=lambda e: e.name)
+        for e in found:
+            if not e.is_file():
                 continue
-            out.append(Entry(path=p, seq=int(m.group(1)), label=m.group(2), meta=read_header(p)))
+            m = _FILE_RE.match(e.name)
+            out.append(Entry(path=Path(e.path), seq=int(m.group(1)), label=m.group(2), meta=_cached_header(e)))
         out.sort(key=lambda e: e.seq)
         return out
 
@@ -85,6 +88,25 @@ class Transcript:
 
 
 # -------------------------------------------------------------------- header
+_HEADERS: dict[str, tuple[tuple[int, int], dict]] = {}
+_MAX_HEADERS = 4096
+
+
+def _cached_header(e: os.DirEntry) -> dict:
+    """기록 파일은 한 번 쓰면 바뀌지 않는다. 폴더 목록의 (수정 시각, 크기)가 같으면 머리말을 다시 읽지 않는다:
+    진행 중인 실행의 상세는 2초마다 불린다 (DESIGN.md 36.38)."""
+    st = e.stat()
+    key = (st.st_mtime_ns, st.st_size)
+    hit = _HEADERS.get(e.path)
+    if hit is not None and hit[0] == key:
+        return dict(hit[1])
+    meta = read_header(Path(e.path))
+    if len(_HEADERS) >= _MAX_HEADERS:
+        _HEADERS.clear()
+    _HEADERS[e.path] = (key, meta)
+    return dict(meta)
+
+
 def render_header(meta: Mapping[str, Any]) -> str:
     lines = [HEADER_START]
     for k, v in meta.items():
