@@ -58,7 +58,15 @@ _STEP_KEYS = {
     "continue": {"kind", "id", "implementer", "reviewers", "rounds", "next", "max_visits"},
     "parallel": {"kind", "id", "branches", "next", "max_visits"},
 }
-_TOP_KEYS = {"name", "description", "roles", "steps"}
+_TOP_KEYS = {"name", "description", "roles", "steps", "editor"}
+# 편집 화면 배치 [editor] (DESIGN.md 36.34): 실행에는 쓰지 않고 그대로 돌려준다.
+MAX_EDITOR_NODES = 500
+MAX_TIES = 200
+MAX_TIE_WIRES = 64
+_COORD_LIMIT = 1_000_000
+_NODE_KEY = r"(?:role:[a-z][a-z0-9_]{0,23}|step:[1-9][0-9]{0,3})"
+_NODE_KEY_RE = re.compile(rf"^{_NODE_KEY}$")
+_WIRE_RE = re.compile(rf"^{_NODE_KEY}/[a-z_]{{1,24}}>{_NODE_KEY}/[a-z_]{{1,24}}$")
 
 
 class WorkflowError(Exception):
@@ -178,6 +186,7 @@ class Workflow:
     steps: list[Step]
     source: str = "builtin"
     path: str = ""
+    editor: dict[str, Any] = field(default_factory=dict)  # 편집 화면 배치, 실행과 무관
 
     @property
     def is_classic(self) -> bool:
@@ -205,7 +214,8 @@ class Workflow:
     def to_dict(self) -> dict[str, Any]:
         return {"name": self.name, "description": self.description, "source": self.source,
                 "roles": {n: r.to_dict() for n, r in self.roles.items()},
-                "steps": [s.to_dict() for s in self.steps]}
+                "steps": [s.to_dict() for s in self.steps],
+                **({"editor": self.editor} if self.editor else {})}
 
     @classmethod
     def from_dict(cls, data: Mapping[str, Any]) -> "Workflow":
@@ -258,7 +268,43 @@ def parse_workflow(data: Mapping[str, Any], *, name_hint: str, source: str, wher
         check_graph(steps, err)
     else:
         _check_order(steps, err)
-    return Workflow(name=name.strip(), description=description.strip(), roles=roles, steps=steps, source=source)
+    return Workflow(name=name.strip(), description=description.strip(), roles=roles, steps=steps, source=source,
+                    editor=_parse_editor(data.get("editor")))
+
+
+def _parse_editor(raw: Any) -> dict[str, Any]:
+    """편집 화면 배치(노드 위치·선 묶기, DESIGN.md 36.34). 화면용이라 형식이 틀린 항목은 오류 없이 버린다."""
+    if not isinstance(raw, Mapping):
+        return {}
+
+    def coord(v: Any) -> bool:
+        return isinstance(v, int) and not isinstance(v, bool) and abs(v) <= _COORD_LIMIT
+
+    nodes: dict[str, list[int]] = {}
+    raw_nodes = raw.get("nodes")
+    if isinstance(raw_nodes, Mapping):
+        for key, pos in list(raw_nodes.items())[:MAX_EDITOR_NODES]:
+            if (isinstance(key, str) and _NODE_KEY_RE.match(key) and isinstance(pos, list) and len(pos) == 2
+                    and all(coord(c) for c in pos)):
+                nodes[key] = [pos[0], pos[1]]
+    ties: list[dict[str, Any]] = []
+    raw_ties = raw.get("ties")
+    if isinstance(raw_ties, list):
+        for tie in raw_ties[:MAX_TIES]:
+            if not isinstance(tie, Mapping):
+                continue
+            x, y, angle, wires = tie.get("x"), tie.get("y"), tie.get("angle", 0), tie.get("wires")
+            if not (coord(x) and coord(y) and coord(angle) and isinstance(wires, list)):
+                continue
+            kept = list(dict.fromkeys(w for w in wires if isinstance(w, str) and _WIRE_RE.match(w)))
+            if kept:
+                ties.append({"x": x, "y": y, "angle": angle % 360, "wires": kept[:MAX_TIE_WIRES]})
+    out: dict[str, Any] = {}
+    if nodes:
+        out["nodes"] = nodes
+    if ties:
+        out["ties"] = ties
+    return out
 
 
 def _parse_role(name: Any, data: Any, err) -> Role:

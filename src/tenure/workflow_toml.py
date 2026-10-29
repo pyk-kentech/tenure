@@ -38,7 +38,7 @@ def _value(v: Any) -> str:
 
 
 def dump_workflow(data: Mapping[str, Any]) -> str:
-    """{name, description, roles: {이름: {...}}, steps: [{...}]} → TOML 텍스트."""
+    """{name, description, roles: {이름: {...}}, steps: [{...}], editor?: {...}} → TOML 텍스트."""
     lines: list[str] = []
     for key in ("name", "description"):
         if data.get(key):
@@ -49,6 +49,14 @@ def dump_workflow(data: Mapping[str, Any]) -> str:
     for step in data.get("steps") or []:
         lines += ["", "[[steps]]"]
         lines += [f"{_key(str(k))} = {_value(v)}" for k, v in step.items() if v not in (None, "", [])]
+    editor = data.get("editor") or {}
+    if editor.get("nodes") or editor.get("ties"):
+        lines += ["", "[editor]"]
+        if editor.get("nodes"):
+            lines.append(f"nodes = {_value(editor['nodes'])}")
+        for tie in editor.get("ties") or []:
+            lines += ["", "[[editor.ties]]"]
+            lines += [f"{_key(str(k))} = {_value(v)}" for k, v in tie.items()]
     text = "\n".join(lines).lstrip("\n") + "\n"
     tomllib.loads(text)  # 쓴 것이 다시 읽히는지
     return text

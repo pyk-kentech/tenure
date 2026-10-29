@@ -55,7 +55,8 @@ def _definition(wf: Workflow) -> dict[str, Any]:
     """편집기가 다시 그릴 수 있는 정의(검사를 거친 정규형)."""
     return {"name": wf.name, "description": wf.description,
             "roles": {n: r.to_dict() for n, r in wf.roles.items()},
-            "steps": [s.to_dict() for s in wf.steps]}
+            "steps": [s.to_dict() for s in wf.steps],
+            **({"editor": wf.editor} if wf.editor else {})}
 
 
 def workflow_get(d: Any, project: Any, name: Any) -> dict[str, Any]:
