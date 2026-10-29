@@ -1050,7 +1050,7 @@ def exec_restart(server: "TenureServer") -> None:
         # 소켓을 먼저 닫지 않는다: 이 함수는 다른 스레드에서 불리는데, 메인 스레드가 기다리던 소켓을 닫으면
         # WinError 10038 로 메인 스레드가 먼저 죽어 새 프로세스를 띄우지 못한다. 새 프로세스는 포트가 풀릴 때까지
         # 다시 시도하고(serve 의 exact 경로), 이 프로세스가 끝나면 소켓은 운영체제가 닫는다.
-        subprocess.Popen(argv, env=env)
+        subprocess.Popen(argv, env=env, **procs.detached_kwargs())   # 창 없이 (위와 같은 이유)
         os._exit(0)
     server.server_close()
     os.execve(sys.executable, argv, env)

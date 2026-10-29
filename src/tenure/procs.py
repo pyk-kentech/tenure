@@ -31,7 +31,6 @@ WINDOWS_ARG_MAX_BYTES = 24_000
 REPLACE_RETRY_SEC = 5.0
 
 _CREATE_NEW_PROCESS_GROUP = 0x00000200
-_DETACHED_PROCESS = 0x00000008
 _CREATE_NO_WINDOW = 0x08000000
 _CREATE_NEW_CONSOLE = 0x00000010
 
@@ -45,9 +44,15 @@ def child_kwargs() -> dict:
 
 
 def detached_kwargs() -> dict:
-    """UI 가 띄우는 tenure run/resume. UI 를 꺼도 계속 돈다."""
+    """UI 가 띄우는 tenure run/resume. UI 를 꺼도 계속 돈다.
+
+    Windows: 콘솔 없이(DETACHED_PROCESS) 띄우면, 그 프로세스가 띄우는 콘솔 프로그램(venv 의 python.exe 가 다시
+    띄우는 진짜 Python, 플래그 없이 불리는 도구 등)마다 새 콘솔 창이 떴다 꺼진다(2026-10-29 사용자 지적). 숨은 새
+    콘솔(CREATE_NO_WINDOW)로 띄우면 자식들이 그 콘솔을 물려받아 창이 뜨지 않고, 부모와 콘솔을 나누지 않으니 UI 를
+    꺼도 계속 돈다.
+    """
     if IS_WINDOWS:
-        return {"creationflags": _DETACHED_PROCESS | _CREATE_NEW_PROCESS_GROUP}
+        return {"creationflags": _CREATE_NO_WINDOW | _CREATE_NEW_PROCESS_GROUP}
     return {"start_new_session": True}
 
 

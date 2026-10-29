@@ -59,3 +59,13 @@ def test_step_mark_is_per_thread_and_restored():
         t.start()
         t.join()
     assert seen["thread"] == {} and wf_step_meta() == {}
+
+
+def test_background_runs_get_a_hidden_console_on_windows(monkeypatch):
+    """콘솔 없이 띄우면 그 아래 콘솔 프로그램마다 창이 떴다 꺼진다(2026-10-29). 숨은 콘솔로 띄운다."""
+    from tenure import procs
+
+    monkeypatch.setattr(procs, "IS_WINDOWS", True)
+    flags = procs.detached_kwargs()["creationflags"]
+    assert flags & 0x08000000            # CREATE_NO_WINDOW
+    assert not flags & 0x00000008        # DETACHED_PROCESS
