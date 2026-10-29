@@ -14,7 +14,7 @@ import threading
 from dataclasses import dataclass, replace
 
 from tenure.phases.build import BuildPhase
-from tenure.phases.common import PhaseContext, PhaseStop
+from tenure.phases.common import PhaseContext, PhaseStop, in_wf_step
 from tenure.phases.debate import DebatePhase
 from tenure.phases.extra import run_audit, run_explore
 from tenure.state import FAILED, RUNNING
@@ -52,14 +52,15 @@ class GraphRunner:
                 break
             visits[cur] = n
             inst = step if n == 1 else replace(step, id=f"{step.id}_{n}")
-            if step.kind == "debate":
-                if not self.st.is_done("debate"):
-                    DebatePhase(self.ctx, step).run()
-                    self.st.mark_done("debate")
-                    self.ctx.save()
-                if design_only:
-                    return GraphResult(approved=None, design_stop=True)
-            cur = self._step(step, inst, n)
+            with in_wf_step(step.id, n):               # 진행 보기용 단계 표시 (36.35)
+                if step.kind == "debate":
+                    if not self.st.is_done("debate"):
+                        DebatePhase(self.ctx, step).run()
+                        self.st.mark_done("debate")
+                        self.ctx.save()
+                    if design_only:
+                        return GraphResult(approved=None, design_stop=True)
+                cur = self._step(step, inst, n)
         return GraphResult(approved=self._approved())
 
     def _next(self, step: Step) -> str:
@@ -151,13 +152,15 @@ class GraphRunner:
         self.ctx.log(f"병렬 실행 {step.id}: {', '.join(b.id for b in branches)} 를 동시에 실행합니다.")
         errors: list[BaseException] = []
 
-        def work(b: Step) -> None:
+        def work(base: str, b: Step) -> None:
             try:
-                (run_audit if b.kind == "audit" else run_explore)(self.ctx, b)
+                with in_wf_step(base, n):    # 새 스레드는 빈 문맥에서 시작하므로 갈래마다 다시 담는다
+                    (run_audit if b.kind == "audit" else run_explore)(self.ctx, b)
             except BaseException as e:   # 스레드 밖에서 다시 올린다
                 errors.append(e)
 
-        threads = [threading.Thread(target=work, args=(b,), daemon=True) for b in branches]
+        threads = [threading.Thread(target=work, args=(base, b), daemon=True)
+                   for base, b in zip(step.branches, branches)]
         for t in threads:
             t.start()
         for t in threads:

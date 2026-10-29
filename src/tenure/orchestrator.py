@@ -30,7 +30,7 @@ from tenure.config import (
 from tenure.dedup import DEDUP_ROLE
 from tenure.lock import LockBusy, RunLock
 from tenure.phases.build import BuildPhase
-from tenure.phases.common import PhaseContext, PhaseStop
+from tenure.phases.common import PhaseContext, PhaseStop, in_wf_step, wf_step_meta
 from tenure.phases.debate import DESIGN_FILENAME, DebatePhase
 from tenure.phases.extra import run_audit, run_explore
 from tenure.graph_run import GraphRunner
@@ -140,7 +140,7 @@ class Orchestrator:
         line = f"[{dt.datetime.now():%H:%M:%S}] {msg}"
         self.printer(line)
         if self._events is not None:              # 화면의 실시간 타임라인 (DESIGN.md 36.3)
-            self._events.emit(events.LOG, text=msg)
+            self._events.emit(events.LOG, text=msg, **wf_step_meta())
         if self._console is not None:
             try:
                 self._console.write(line + "\n")
@@ -334,29 +334,30 @@ class Orchestrator:
                     return self._design_done(ctx, workdir, run_dir, "design_only")
                 approved = result.approved
             for step in ([] if wf.is_graph else wf.steps):
-                if step.kind == "explore":
-                    run_explore(ctx, step)
-                elif step.kind == "debate":
-                    if not state.is_done("debate"):
-                        DebatePhase(ctx, step).run()
-                        state.mark_done("debate")
-                        state.save(run_dir)
-                    if design_only:
-                        return self._design_done(ctx, workdir, run_dir, "design_only")
-                elif step.kind == "build":
-                    if not state.is_done("build"):
-                        approved = BuildPhase(ctx, step=step).run()
-                        state.mark_done("build")
-                        state.save(run_dir)
-                    else:
-                        approved = bool(state.review_history and state.review_history[-1].get("approved"))
-                elif step.kind == "audit":
-                    if approved:
-                        run_audit(ctx, step)
-                    elif not state.is_done(f"audit:{step.id}"):
-                        self.log(f"감사 건너뜀({step.id}): 승인되지 않아 감사하지 않습니다.")
-                        state.mark_done(f"audit:{step.id}")
-                        state.save(run_dir)
+                with in_wf_step(step.id):                # 진행 보기용 단계 표시 (36.35)
+                    if step.kind == "explore":
+                        run_explore(ctx, step)
+                    elif step.kind == "debate":
+                        if not state.is_done("debate"):
+                            DebatePhase(ctx, step).run()
+                            state.mark_done("debate")
+                            state.save(run_dir)
+                        if design_only:
+                            return self._design_done(ctx, workdir, run_dir, "design_only")
+                    elif step.kind == "build":
+                        if not state.is_done("build"):
+                            approved = BuildPhase(ctx, step=step).run()
+                            state.mark_done("build")
+                            state.save(run_dir)
+                        else:
+                            approved = bool(state.review_history and state.review_history[-1].get("approved"))
+                    elif step.kind == "audit":
+                        if approved:
+                            run_audit(ctx, step)
+                        elif not state.is_done(f"audit:{step.id}"):
+                            self.log(f"감사 건너뜀({step.id}): 승인되지 않아 감사하지 않습니다.")
+                            state.mark_done(f"audit:{step.id}")
+                            state.save(run_dir)
             if approved is None:
                 return self._design_done(ctx, workdir, run_dir, "no_build")
             if approved:

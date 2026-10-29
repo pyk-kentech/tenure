@@ -7,12 +7,16 @@
 
 from __future__ import annotations
 
+import contextvars
+from collections.abc import Iterator
+from contextlib import contextmanager
+
 import datetime as dt
 import threading
 import time
 from dataclasses import dataclass, field
 from pathlib import Path
-from typing import TYPE_CHECKING, Callable, Mapping
+from typing import TYPE_CHECKING, Any, Callable, Mapping
 
 from tenure import events, slots
 from tenure.outcome import step_outcome
@@ -32,6 +36,28 @@ if TYPE_CHECKING:
 Logger = Callable[[str], None]
 EXPLORE_NOTE_MAX = 20_000   # 사전 조사 결과를 프롬프트에 붙일 때 최대 길이
 DESIGN_DOC_DEFAULT = "DESIGN.md"
+
+
+# 지금 실행 중인 워크플로 단계 (DESIGN.md 36.35). 병렬 갈래는 스레드마다 따로 담는다.
+_WF_STEP: contextvars.ContextVar[tuple[str, int]] = contextvars.ContextVar("tenure_wf_step", default=("", 0))
+
+
+@contextmanager
+def in_wf_step(step_id: str, visit: int = 1) -> Iterator[None]:
+    """이 블록 안의 에이전트 호출·로그에 워크플로 단계 id 를 붙인다."""
+    token = _WF_STEP.set((step_id, visit))
+    try:
+        yield
+    finally:
+        _WF_STEP.reset(token)
+
+
+def wf_step_meta() -> dict[str, Any]:
+    """이벤트·호출 기록에 붙일 단계 표시 (단계 밖이면 빈 dict)."""
+    step_id, visit = _WF_STEP.get()
+    if not step_id:
+        return {}
+    return {"wf_step": step_id, **({"visit": visit} if visit > 1 else {})}
 
 
 class PhaseStop(Exception):
@@ -251,7 +277,7 @@ class PhaseContext:
             started = time.monotonic()
             self.log(f"{agent_name} ← {step}" + (f" (재시도 {attempt - 1})" if attempt > 1 else "") + " 실행 중...")
             events.for_run(self.run_dir).emit(events.STEP_START, agent=self.cli_of(agent_name), role=agent_name,
-                                              step=step, round=round_, attempt=attempt)
+                                              step=step, round=round_, attempt=attempt, **wf_step_meta())
             try:
                 if getattr(agent, "uses_slot", True):     # 동시 에이전트 상한 (DESIGN.md 36.18)
                     with slots.agent_slot(self.cfg.max_agents, log=self.log, what=f"{agent_name} {step}"):
@@ -280,6 +306,7 @@ class PhaseContext:
                 **({"session_id": result.session_id} if result.session_id else {}),
                 **({"structured": True} if result.structured is not None else {}),
                 **(extra_meta or {}),
+                **wf_step_meta(),
             }
             text = (transform(result) if transform is not None else result.text) if result.ok else result.text
             body = text if result.ok else _failure_body(result)
@@ -291,7 +318,7 @@ class PhaseContext:
                                        role=agent_name if cli != agent_name else None, outcome=outcome, reason=why)
             events.for_run(self.run_dir).emit(events.STEP_END, agent=cli, role=agent_name, step=step, round=round_,
                                               attempt=attempt, outcome=outcome, reason=why, sec=round(elapsed, 1),
-                                              file=path.name)
+                                              file=path.name, **wf_step_meta())
 
             if result.ok:
                 self.log(f"{agent_name} ← {step} 완료 ({elapsed:.0f}초)"
