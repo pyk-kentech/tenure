@@ -240,7 +240,8 @@ class Orchestrator:
                                              ("mock", opts.mock)) if on]
                     self.log(f"워크플로: {wf.name} ({SOURCE_LABELS.get(wf.source, wf.source)}) — {wf.summary()}"
                              + (f" / {', '.join(flags)}" if flags else ""))
-                    self.log(f"토론 {cfg.debate_rounds}라운드 / 리뷰 최대 {cfg.max_review}회")
+                    self.log((f"토론 {cfg.debate_rounds}라운드 / " if wf.first("debate") else "")
+                             + f"리뷰 최대 {cfg.max_review}회")
                     self.log("역할: " + " / ".join(self._describe_role(wf, n, cfg) for n in wf.used_roles()))
                 self._log_env_drops(cfg, opts.mock)
                 return self._execute(workdir, run_dir, cfg, agents, state, wf)
@@ -452,8 +453,14 @@ class Orchestrator:
             elif opts.overrides.get("debate_rounds") is None and debate.rounds is not None:
                 changes["debate_rounds"] = debate.rounds
         build = wf.first("build")
-        if build is not None and opts.overrides.get("max_review") is None and build.max_review is not None:
+        cap = opts.overrides.get("max_review")
+        if build is not None and cap is None and build.max_review is not None:
             changes["max_review"] = build.max_review
+        if cap is not None:
+            # 요약 줄·run.json 의 단계도 실제 상한(CLI 인자)을 보이게 한다
+            for step in wf.steps:
+                if step.kind == "build" and step.max_review is not None:
+                    step.max_review = int(cap)
         cfg = replace(cfg, **changes)
         try:
             cfg.validate()
