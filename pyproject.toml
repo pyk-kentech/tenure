@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "tenure"
-version = "0.1.0"
+version = "0.2.0"
 description = "Claude Code와 Codex CLI가 설계를 토론하고 서로의 코드를 교차 리뷰하는 로컬 CLI 도구"
 readme = "README.md"
 requires-python = ">=3.11"
