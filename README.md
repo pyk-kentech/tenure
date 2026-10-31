@@ -68,10 +68,10 @@ duet는 실행하는 머신의 `claude`, `codex`를 부릅니다. 그래서 새 
 # A. css53 저장소에서 SSH로 바로 설치 (새 머신이 css53에 SSH 접속 가능할 때)
 uv tool install --python 3.12 git+ssh://yonggamman@css53/home/yonggamman/tenure
 
-# B. 패키지 파일 복사 (css53에서 `uv build` 로 만든 dist/tenure-0.1.0-py3-none-any.whl)
-scp yonggamman@css53:tenure/dist/tenure-0.1.0-py3-none-any.whl .
-uv tool install --python 3.12 ./tenure-0.1.0-py3-none-any.whl
-#   uv 가 없으면: python3.11 -m pip install --user ./tenure-0.1.0-py3-none-any.whl
+# B. 패키지 파일 복사 (css53에서 `uv build` 로 만든 dist/tenure-0.2.0-py3-none-any.whl)
+scp yonggamman@css53:tenure/dist/tenure-0.2.0-py3-none-any.whl .
+uv tool install --python 3.12 ./tenure-0.2.0-py3-none-any.whl
+#   uv 가 없으면: python3.11 -m pip install --user ./tenure-0.2.0-py3-none-any.whl
 
 # C. GitHub 등 원격 저장소에 올린 뒤
 uv tool install --python 3.12 git+https://github.com/<계정>/tenure
